@@ -8,44 +8,37 @@
 //  elas_mode are the first 4 mode shapes array of the fluid mesh.
 //       node-No.,x-coor,y-coor,z-coor,shape-information
 static double elas_mode[66654][16];
-// 66654 row, 16column, Start at 0 when called*/
+// 66654 row, 16column, Start at 0 when called
 
 // define the read_mode()  to read input the array from the .txt file
 void read_my_mode()
 {
-	// define variables, file pointer
-	FILE *fp;
-	int i, j, k;
-	memset(elas_mode, 0,66654 * 16 * sizeof(double));
+	FILE *fp;										   // file pointer
+	int i, j, k;									   // indexes
+	memset(elas_mode, 0, 66654 * 16 * sizeof(double)); // initialize elas_mode
 
-	// open the file in the read-only mode
-	fp = fopen("elas_mode.txt", "r");
-
-	if (fp == NULL)
+	fp = fopen("elas_mode.txt", "r"); // open the file in the read-only mode
+	if (fp == NULL)					  // file not exists -> print error
 		Message("Error, Can not find the file.\n");
 	else
-		// initialise the array
-		for (i = 0; i < 66654; i++)
+		for (i = 0; i < 66654; i++) // fill the array
 			for (j = 0; j < 16; j++)
 				fscanf(fp, "%lf", &elas_mode[i][j]);
-	
-	fclose(fp);
-	
-	// validation for the initialization of the array: print out the variables
-	Message("\n --- The elas_mode array is: ---\n");
-	
-	for (k = 0; k < 16; k++)
+	fclose(fp); // close file
+
+	Message("\n --- The elas_mode array is: ---\n"); // validation for the initialization of the elas_mode
+	for (k = 0; k < 16; k++)						 // print variables
 		if (k == 0)
 			Message("%f \t", elas_mode[66654][k]);
 		else
 			Message("%6.5e \t", elas_mode[66654][k]);
-
-	Message("\n --- Validation is done! ---\n");
+	Message("\n ---   Validation is done!   ---\n");
 }
 
 static int count = 0;	   // record the number of total nodes
 static int iter_index = 1; // record the number of the iteration steps
 static int time_index = 0; // record the number of the time steps
+
 DEFINE_ON_DEMAND(Preparation)
 {
 	Domain *domain;
