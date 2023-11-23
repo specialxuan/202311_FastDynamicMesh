@@ -14,6 +14,11 @@ int main()
         for (j = 0; j < 16; j++)
             if (fscanf(fp, "%lf", elas_mode + i * 16 + j) == 0 || fscanf(fp, "%lf", elas_mode + i * 16 + j) == EOF)
                 break;
+    for (j = 0; j < 16; j++) // print variables
+        if (j == 0)
+            printf("%f \t", elas_mode[66654 * 16 + j]);
+        else
+            printf("%6.5e \t", elas_mode[66654 * 16 + j]);
 
     printf("%d, %d\n", i, j);
 
