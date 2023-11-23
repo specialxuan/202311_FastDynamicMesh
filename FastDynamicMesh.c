@@ -11,7 +11,7 @@ static double elas_mode[66654][16];
 // 66654 row, 16column, Start at 0 when called
 
 // define the read_mode()  to read input the array from the .txt file
-bool read_my_mode()
+int read_my_mode()
 {
 	FILE *fp;										   // file pointer
 	int i, j;										   // indexes
