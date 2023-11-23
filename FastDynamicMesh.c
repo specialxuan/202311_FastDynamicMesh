@@ -7,7 +7,7 @@
 // 				   define 1 array variables:
 //  elas_mode are the first 4 mode shapes array of the fluid mesh.
 //       node-No.,x-coor,y-coor,z-coor,shape-information
-static double elas_mode[66654][16];
+static double *elas_mode;
 // 66654 row, 16column, Start at 0 when called
 
 // define the read_mode()  to read input the array from the .txt file
@@ -15,7 +15,6 @@ int read_my_mode()
 {
 	FILE *fp;										   // file pointer
 	int i, j;										   // indexes
-	memset(elas_mode, 0, 66654 * 16 * sizeof(double)); // initialize elas_mode
 
 	fp = fopen("elas_mode.txt", "r"); // open the file in the read-only mode
 	if (fp == NULL)					  // file not exists -> print error
@@ -27,16 +26,16 @@ int read_my_mode()
 
 	for (i = 0; i < 66654; i++) // fill the array
 		for (j = 0; j < 16; j++)
-			fscanf(fp, "%lf", &elas_mode[i][j]);
-	
+			fscanf(fp, "%lf", elas_mode + i * 16 + j);
+
 	fclose(fp); // close file
 
 	Message("\n --- The elas_mode array is: ---\n"); // validation for the initialization of the elas_mode
 	for (j = 0; j < 16; j++)						 // print variables
 		if (j == 0)
-			Message("%f \t", elas_mode[66654][j]);
+			Message("%f \t", elas_mode[66654 * 16 + j]);
 		else
-			Message("%6.5e \t", elas_mode[66654][j]);
+			Message("%6.5e \t", elas_mode[66654 * 16 + j]);
 	Message("\n ---   Validation is done!   ---\n");
 	
 	return 0;
@@ -64,6 +63,8 @@ DEFINE_ON_DEMAND(Preparation)
 	
 	// for single-phase flows, domain_id is 1 and Get_Domain(1) returns the fluid domain pointer
 	domain = Get_Domain(1);
+	*elas_mode = (double *)malloc(66655 * 16 * sizeof(double));
+	memset(elas_mode, 0, 66655 * 16 * sizeof(double)); // initialize elas_mode
 	read_my_mode();
 	
 	// Store the modal shape information in user-defined node memory
@@ -88,7 +89,7 @@ DEFINE_ON_DEMAND(Preparation)
 				{
 					for (i = 0; i < 12; i++)
 					{
-						N_UDMI(v, i) = elas_mode[count][i + 4];
+						N_UDMI(v, i) = elas_mode[count * 16 + i + 1];
 					}
 					count += 1;
 				}
@@ -98,6 +99,8 @@ DEFINE_ON_DEMAND(Preparation)
 	}	
 	Message("\n --- The number of total nodes is: ---\n");
 	Message("%d \t", count);
+	
+	free(elas_mode);
 }
 
 // calculation of the modal aerodynamic force
