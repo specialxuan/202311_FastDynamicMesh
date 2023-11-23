@@ -11,28 +11,35 @@ static double elas_mode[66654][16];
 // 66654 row, 16column, Start at 0 when called
 
 // define the read_mode()  to read input the array from the .txt file
-void read_my_mode()
+bool read_my_mode()
 {
 	FILE *fp;										   // file pointer
-	int i, j, k;									   // indexes
+	int i, j;										   // indexes
 	memset(elas_mode, 0, 66654 * 16 * sizeof(double)); // initialize elas_mode
 
 	fp = fopen("elas_mode.txt", "r"); // open the file in the read-only mode
 	if (fp == NULL)					  // file not exists -> print error
+	{
 		Message("Error, Can not find the file.\n");
-	else
-		for (i = 0; i < 66654; i++) // fill the array
-			for (j = 0; j < 16; j++)
-				fscanf(fp, "%lf", &elas_mode[i][j]);
+		fclose(fp); // close file
+		return 1;
+	}
+
+	for (i = 0; i < 66654; i++) // fill the array
+		for (j = 0; j < 16; j++)
+			fscanf(fp, "%lf", &elas_mode[i][j]);
+	
 	fclose(fp); // close file
 
 	Message("\n --- The elas_mode array is: ---\n"); // validation for the initialization of the elas_mode
-	for (k = 0; k < 16; k++)						 // print variables
-		if (k == 0)
-			Message("%f \t", elas_mode[66654][k]);
+	for (j = 0; j < 16; j++)						 // print variables
+		if (j == 0)
+			Message("%f \t", elas_mode[66654][j]);
 		else
-			Message("%6.5e \t", elas_mode[66654][k]);
+			Message("%6.5e \t", elas_mode[66654][j]);
 	Message("\n ---   Validation is done!   ---\n");
+	
+	return 0;
 }
 
 static int count = 0;	   // record the number of total nodes
@@ -100,9 +107,9 @@ static real m = 1;										// modal mass = 1, which means normalization of prin
 static real c = 0;										// modal damping
 static real Pi = 3.141592654;							// Pi
 static real theta = 1.4;								// wilson-theta method, the value of the theta
-static int FSI_ID = 19;									// record the id of the fsi faces, shown in fluent
-static int Fluid_ID = 11;								// record the id of the fluid cell zone, shown in fluent
-static real freq[4] = {0.17839, 1.103, 3.0322, 5.8042}; // frequencies of the structure
+static int FSI_ID = 19;									// record the id of the fsi faces, shown in fluent       // TODO: read from file
+static int Fluid_ID = 11;								// record the id of the fluid cell zone, shown in fluent // TODO: read from file
+static real freq[4] = {0.17839, 1.103, 3.0322, 5.8042}; // frequencies of the structure                          // TODO: read from file
 static real ini_vel[4] = {0, 0, 0, 0};					// initial modal velocity
 static real mode_force[100000][5] = {0};				// modal force
 static real mode_disp[100000][12] = {0};				// modal-displacement,modal-velocity,acceleration repeat
@@ -116,7 +123,7 @@ DEFINE_GRID_MOTION(FDM_method, domain, dt, time, dtime)
 	face_t f;									   // An integer data type that identifies a particular face within a face thread.
 	Node *node;									   // A structure data type that stores data associated with a mesh point
 	int node_index, i;
-	for (i = 1; i < 5; i++)
+	for (i = 1; i < 5; i++) //TODO: use memset
 	{
 		mode_force[time_index][i] = 0;
 	}
