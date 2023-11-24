@@ -69,7 +69,11 @@ DEFINE_ON_DEMAND(Preparation)
 	domain = Get_Domain(1);
 	elas_mode = (double *)malloc(66654 * 16 * sizeof(double));
 	memset(elas_mode, 0, 66654 * 16 * sizeof(double)); // initialize elas_mode
-	if (read_my_mode() == 0)
+	if (read_my_mode())
+	{
+		Message("\n ---      Error: read_my_mode      ---\n");
+	}
+	else
 	{
 		// Store the modal shape information in user-defined node memory
 		thread_loop_c(t, domain){
@@ -104,10 +108,6 @@ DEFINE_ON_DEMAND(Preparation)
 		
 		Message("\n --- The number of total nodes is: ---\n");
 		Message("%d \t", count);
-	}
-	else
-	{
-		Message("\n ---      Error: read_my_mode      ---\n");
 	}
 	free(elas_mode);
 }
