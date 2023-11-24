@@ -19,25 +19,29 @@ int read_my_mode()
 	fp = fopen("elas_mode.txt", "r"); // open the file in the read-only mode
 	if (fp == NULL)					  // file not exists -> print error
 	{
-		Message("Error, Can not find the file.\n");
-		fclose(fp); // close file
+		Message("\n ---        Error: No file.        ---\n");
 		return 1;
 	}
 
 	for (i = 0; i < 66654; i++) // fill the array
 		for (j = 0; j < 16; j++)
-			fscanf(fp, "%lf", elas_mode + i * 16 + j);
+			if (fscanf(fp, "%lf", elas_mode + i * 16 + j) <= 0)
+			{
+				Message("\n ---   Error: Lack of variables.   ---\n From (%d,%d)", i, j);
+				fclose(fp);
+				return 1;
+			}
 
 	fclose(fp); // close file
 
-	Message("\n --- The elas_mode array is: ---\n"); // validation for the initialization of the elas_mode
+	Message("\n ---    The elas_mode array is:    ---\n"); // validation for the initialization of the elas_mode
 	for (j = 0; j < 16; j++)						 // print variables
 		if (j == 0)
 			Message("%f \t", elas_mode[66654 * 16 + j]);
 		else
 			Message("%6.5e \t", elas_mode[66654 * 16 + j]);
-	Message("\n ---   Validation is done!   ---\n");
-	
+	Message("\n ---      Validation is done!      ---\n");
+
 	return 0;
 }
 
@@ -63,43 +67,48 @@ DEFINE_ON_DEMAND(Preparation)
 	
 	// for single-phase flows, domain_id is 1 and Get_Domain(1) returns the fluid domain pointer
 	domain = Get_Domain(1);
-	*elas_mode = (double *)malloc(66654 * 16 * sizeof(double));
+	elas_mode = (double *)malloc(66654 * 16 * sizeof(double));
 	memset(elas_mode, 0, 66654 * 16 * sizeof(double)); // initialize elas_mode
-	read_my_mode();
-	
-	// Store the modal shape information in user-defined node memory
-	thread_loop_c(t, domain){
+	if (read_my_mode() == 0)
+	{
+		// Store the modal shape information in user-defined node memory
+		thread_loop_c(t, domain){
+			begin_c_loop(c, t){
+				c_node_loop(c, t, n){
+					v = C_NODE(c, t, n);
+					
+					// set the value of the first user define node memory as 100
+					// used to identify if the node has stored the shape information or not
+					N_UDMI(v, 0) = 100;
+				}
+			}
+			end_c_loop(c, t)
+		}
+		thread_loop_c(t, domain){
 		begin_c_loop(c, t){
 			c_node_loop(c, t, n){
 				v = C_NODE(c, t, n);
-				
-				// set the value of the first user define node memory as 100
-				// used to identify if the node has stored the shape information or not
-				N_UDMI(v, 0) = 100;
-			}
-		}
-		end_c_loop(c, t)
-	}
-	thread_loop_c(t, domain){
-	begin_c_loop(c, t){
-		c_node_loop(c, t, n){
-			v = C_NODE(c, t, n);
-				// hold the modal shape information using the UDMI
-				if (N_UDMI(v, 0) == 100)
-				{
-					for (i = 0; i < 12; i++)
+					// hold the modal shape information using the UDMI
+					if (N_UDMI(v, 0) == 100)
 					{
-						N_UDMI(v, i) = elas_mode[count * 16 + i + 1];
+						for (i = 0; i < 12; i++)
+						{
+							N_UDMI(v, i) = elas_mode[count * 16 + i + 1];
+						}
+						count += 1;
 					}
-					count += 1;
 				}
 			}
+			end_c_loop(c, t)
 		}
-		end_c_loop(c, t)
-	}	
-	Message("\n --- The number of total nodes is: ---\n");
-	Message("%d \t", count);
-	
+		
+		Message("\n --- The number of total nodes is: ---\n");
+		Message("%d \t", count);
+	}
+	else
+	{
+		Message("\n ---      Error: read_my_mode      ---\n");
+	}
 	free(elas_mode);
 }
 
