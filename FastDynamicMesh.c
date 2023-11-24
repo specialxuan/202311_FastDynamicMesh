@@ -4,17 +4,11 @@
 
 #include "udf.h"
 
-// 				   define 1 array variables:
-//  elas_mode are the first 4 mode shapes array of the fluid mesh.
-//       node-No.,x-coor,y-coor,z-coor,shape-information
-static double *elas_mode;
-// 66654 row, 16column, Start at 0 when called
-
 // define the read_mode()  to read input the array from the .txt file
-int read_my_mode()
+int read_my_mode(double *elas_mode)
 {
-	FILE *fp;										   // file pointer
-	int i, j;										   // indexes
+	FILE *fp; // file pointer
+	int i, j; // indexes
 
 	fp = fopen("elas_mode.txt", "r"); // open the file in the read-only mode
 	if (fp == NULL)					  // file not exists -> print error
@@ -56,6 +50,10 @@ DEFINE_ON_DEMAND(Preparation)
 	Thread *t;
 	Node *v;
 	int n, i;
+	double *elas_mode; // elas_mode are the first 4 mode shapes array of the fluid mesh.
+					   // node-No.,x-coor,y-coor,z-coor,shape-information
+					   // 66654 row, 16column, Start at 0 when called
+
 	count = 0;
 	iter_index = 1;
 	time_index = 0;
@@ -69,7 +67,7 @@ DEFINE_ON_DEMAND(Preparation)
 	domain = Get_Domain(1);
 	elas_mode = (double *)malloc(66654 * 16 * sizeof(double));
 	memset(elas_mode, 0, 66654 * 16 * sizeof(double)); // initialize elas_mode
-	if (read_my_mode())
+	if (read_my_mode(elas_mode))
 	{
 		Message("\n ---      Error: read_my_mode      ---\n");
 	}
