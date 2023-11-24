@@ -63,8 +63,8 @@ DEFINE_ON_DEMAND(Preparation)
 	
 	// for single-phase flows, domain_id is 1 and Get_Domain(1) returns the fluid domain pointer
 	domain = Get_Domain(1);
-	*elas_mode = (double *)malloc(66655 * 16 * sizeof(double));
-	memset(elas_mode, 0, 66655 * 16 * sizeof(double)); // initialize elas_mode
+	*elas_mode = (double *)malloc(66654 * 16 * sizeof(double));
+	memset(elas_mode, 0, 66654 * 16 * sizeof(double)); // initialize elas_mode
 	read_my_mode();
 	
 	// Store the modal shape information in user-defined node memory
