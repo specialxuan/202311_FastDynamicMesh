@@ -57,19 +57,16 @@ DEFINE_ON_DEMAND(Preparation)
 	iter_index = 1;
 	time_index = 0;
 
-	// 			        set  flow time
 	// RP_Get_Real(char *s)-RP_Get_Real("flow-time")
 	// RP_Set_Float(char *s, double v)-RP_Set_Float("flow-time", 0.2)
-	RP_Set_Float("flow-time", 0);
-	
-	// for single-phase flows, domain_id is 1 and Get_Domain(1) returns the fluid domain pointer
-	domain = Get_Domain(1);
-	elas_mode = (double *)malloc(66654 * 16 * sizeof(double));
-	memset(elas_mode, 0, 66654 * 16 * sizeof(double)); // initialize elas_mode
+	RP_Set_Float("flow-time", 0); // set  flow time
+
+	domain = Get_Domain(1);									   // for single-phase flows, domain_id is 1 and Get_Domain(1) returns the fluid domain pointer
+	elas_mode = (double *)malloc(66654 * 16 * sizeof(double)); // allocate memory for elas_mode
+	memset(elas_mode, 0, 66654 * 16 * sizeof(double));		   // initialize elas_mode
+
 	if (read_my_mode(elas_mode))
-	{
 		Message("\n ---      Error: read_my_mode      ---\n");
-	}
 	else
 	{
 		// Store the modal shape information in user-defined node memory
