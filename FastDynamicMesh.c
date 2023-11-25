@@ -39,7 +39,6 @@ int read_my_mode(double *elas_mode)
 	return 0;
 }
 
-static int count = 0;	   // record the number of total nodes
 static int iter_index = 1; // record the number of the iteration steps
 static int time_index = 0; // record the number of the time steps
 
@@ -49,7 +48,7 @@ DEFINE_ON_DEMAND(Preparation)
 	cell_t c;
 	Thread *t;
 	Node *v;
-	int n, i;
+	int n, i, count;   // record the number of total nodes
 	double *elas_mode; // elas_mode are the first 4 mode shapes array of the fluid mesh.
 					   // node-No.,x-coor,y-coor,z-coor,shape-information
 					   // 66654 row, 16column, Start at 0 when called
@@ -87,9 +86,9 @@ DEFINE_ON_DEMAND(Preparation)
 			end_c_loop(c, t)
 		}
 		thread_loop_c(t, domain){
-		begin_c_loop(c, t){
-			c_node_loop(c, t, n){
-				v = C_NODE(c, t, n);
+			begin_c_loop(c, t){
+				c_node_loop(c, t, n){
+					v = C_NODE(c, t, n);
 					// hold the modal shape information using the UDMI
 					if (N_UDMI(v, 0) == 100)
 					{
