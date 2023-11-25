@@ -44,6 +44,8 @@ static int time_index = 0; // record the number of the time steps
 
 DEFINE_ON_DEMAND(Preparation)
 {
+	FILE *fp;
+
 	Domain *domain;
 	cell_t c;
 	Thread *t;
@@ -69,37 +71,47 @@ DEFINE_ON_DEMAND(Preparation)
 		Message("\n ---      Error: read_my_mode      ---\n");
 	else
 	{
+		fp = fopen("numberMatch.csv", "w");
+
 		// Store the modal shape information in user-defined node memory
 		thread_loop_c(t, domain){
 			begin_c_loop(c, t){
 				c_node_loop(c, t, n){
 					v = C_NODE(c, t, n);
 					
-					// set the value of the first user define node memory as 100
+					// set the value of the first user define node memory as 0
 					// used to identify if the node has stored the shape information or not
-					N_UDMI(v, 0) = 100;
+					N_UDMI(v, 12) = 0;
 				}
 			}
 			end_c_loop(c, t)
 		}
+
 		thread_loop_c(t, domain){
 			begin_c_loop(c, t){
 				c_node_loop(c, t, n){
 					v = C_NODE(c, t, n);
-					// hold the modal shape information using the UDMI
-					if (N_UDMI(v, 0) == 100)
+					
+					fprintf(fp, "%5d, %5d,", v, count);
+
+					if (N_UDMI(v, 12) == 0) // hold the modal shape information using the UDMI
 					{
 						for (i = 0; i < 12; i++)
-						{
 							N_UDMI(v, i) = elas_mode[count * 16 + i + 1];
-						}
-						count += 1;
+					
+						fprintf(fp, "%5d, %5d,", v, count);
+						count++;
+						N_UDMI(v, 12) = 1;
 					}
+
+					fprintf(fp, "\n");
 				}
 			}
 			end_c_loop(c, t)
 		}
-		
+
+		fclose(fp);
+
 		Message("\n --- The number of total nodes is: ---\n");
 		Message("%d \t", count);
 	}
