@@ -1,3 +1,7 @@
 Fluent/*
 exe/*
 .vscode/*
+build/*
+*.trn
+*.bat
+libudf/*
