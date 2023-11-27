@@ -1,7 +1,8 @@
-Fluent/*
-exe/*
 .vscode/*
 build/*
-*.trn
-*.bat
+exe/*
+Fluent/*
 libudf/*
+*.bat
+*.log
+*.trn
