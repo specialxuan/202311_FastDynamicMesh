@@ -4,9 +4,9 @@
 #include "udf.h"
 #include "prop.h"
 #include "dpm.h"
-extern DEFINE_ON_DEMAND(hello_world);
+extern DEFINE_ON_DEMAND(Preprocess) ;
 __declspec(dllexport) UDF_Data udf_data[] = {
-{"hello_world", (void (*)(void))hello_world, UDF_TYPE_ON_DEMAND},
+{"Preprocess", (void (*)(void))Preprocess, UDF_TYPE_ON_DEMAND},
 };
 __declspec(dllexport) int n_udf_data = sizeof(udf_data)/sizeof(UDF_Data);
 #include "version.h"
