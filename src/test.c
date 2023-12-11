@@ -22,7 +22,7 @@ int read_my_mode(double *elas_mode, const int row, const int column)
     fp = fopen("elas_mode.txt", "r"); // open the file in the read-only mode
     if (fp == NULL)                   // file not exists -> print error
     {
-        Message("\n ---        Error: No file.        ---\n");
+        Message(" ---        Error: No file.        ---\n");
         return 1;
     }
 
@@ -30,20 +30,20 @@ int read_my_mode(double *elas_mode, const int row, const int column)
         for (j = 0; j < column; j++)
             if (fscanf(fp, "%lf", elas_mode + i * column + j) <= 0)
             {
-                Message("\n ---   Error: Lack of variables.   ---\n From (%d,%d)", i, j);
+                Message(" ---   Error: Lack of variables.   ---\n From (%d,%d)", i, j);
                 fclose(fp);
                 return 1;
             }
 
     fclose(fp); // close file
 
-    Message("\n ---    The elas_mode array is:    ---\n"); // validation for the initialization of the elas_mode
+    Message(" ---    The elas_mode array is:    ---\n"); // validation for the initialization of the elas_mode
     for (j = 0; j < column; j++)                           // print variables
         if (j == 0)
             Message("%f \t", elas_mode[(row - 1) * column + j]);
         else
             Message("%f \t", elas_mode[(row - 1) * column + j]);
-    Message("\n ---      Validation is done!      ---\n");
+    Message(" ---      Validation is done!      ---\n");
 #endif
 
     return 0;
@@ -77,30 +77,32 @@ DEFINE_ON_DEMAND(Preprocess)
     memset(elas_mode, 0, row * column * sizeof(double));         // initialize elas_mode
 
 #if !RP_NODE
+    Message("\n ***      Begin: This is Host      ***\n");
 
     if (fileStatus = read_my_mode(elas_mode, row, column))
-        Message("\n ---      Error: read_my_mode      ---\n");
-
-    Message("iteration = %d, time = %d\n", iter_index, time_index);
-    Message("hello world!\n");
+        Message(" ---      Error: read_my_mode      ---\n");
+    
+    Message(" ***      End:   This is Host      ***\n");
 #endif
 
     host_to_node_int_1(fileStatus);
     host_to_node_double(elas_mode, row * column);
 
 #if !RP_HOST
+    Message("\n +++      Begin: This is Node      +++\n");
+
     domain = Get_Domain(1); // for single-phase flows, domain_id is 1 and Get_Domain(1) returns the fluid domain pointer
-    Message("\n ---         This is Node          ---\n");
     if (fileStatus == 0)
     {
-        Message("\n ---    The elas_mode array is:    ---\n"); // validation for the initialization of the elas_mode
+        Message(" ---    The elas_mode array is:    ---\n"); // validation for the initialization of the elas_mode
         for (i = 0; i < column; i++)                           // print variables
             if (i == 0)
                 Message("%f \t", elas_mode[(row - 1) * column + i]);
             else
                 Message("%f \t", elas_mode[(row - 1) * column + i]);
-        Message("\n ---      Validation is done!      ---\n");
+        Message(" ---      Validation is done!      ---\n");
     }
-    
+
+    Message(" +++      End:   This is Node      +++\n");
 #endif
 }
