@@ -61,10 +61,10 @@ DEFINE_ON_DEMAND(Preprocess)
     Thread *t;
     Node *v;
     int row = 66654, column = 16;
-    int n = 0, i = 0, count = 0; // record the number of total nodes
-    double *elas_mode = NULL;    // elas_mode are the first 4 mode shapes array of the fluid mesh.
-                                 // node-No.,x-coor,y-coor,z-coor,shape-information
-                                 // 66654 row, 16column, Start at 0 when called
+    int n = 0, i = 0, count = 0, fileStatus = 0; // record the number of total nodes
+    double *elas_mode = NULL;                    // elas_mode are the first 4 mode shapes array of the fluid mesh.
+                                                 // node-No.,x-coor,y-coor,z-coor,shape-information
+                                                 // 66654 row, 16column, Start at 0 when called
 
     iter_index = 1;
     time_index = 0;
@@ -73,19 +73,34 @@ DEFINE_ON_DEMAND(Preprocess)
     // RP_Set_Float(char *s, double v)-RP_Set_Float("flow-time", 0.2)
     RP_Set_Float("flow-time", 0); // set  flow time
 
-#if !RP_NODE
     elas_mode = (double *)malloc(row * column * sizeof(double)); // allocate memory for elas_mode
     memset(elas_mode, 0, row * column * sizeof(double));         // initialize elas_mode
 
-    if (read_my_mode(elas_mode, row, column))
+#if !RP_NODE
+
+    if (fileStatus = read_my_mode(elas_mode, row, column))
         Message("\n ---      Error: read_my_mode      ---\n");
 
     Message("iteration = %d, time = %d\n", iter_index, time_index);
     Message("hello world!\n");
 #endif
 
+    host_to_node_int_1(fileStatus);
+    host_to_node_double(elas_mode, row * column);
+
 #if !RP_HOST
     domain = Get_Domain(1); // for single-phase flows, domain_id is 1 and Get_Domain(1) returns the fluid domain pointer
     Message("\n ---         This is Node          ---\n");
+    if (fileStatus == 0)
+    {
+        Message("\n ---    The elas_mode array is:    ---\n"); // validation for the initialization of the elas_mode
+        for (i = 0; i < column; i++)                           // print variables
+            if (i == 0)
+                Message("%f \t", elas_mode[(row - 1) * column + i]);
+            else
+                Message("%f \t", elas_mode[(row - 1) * column + i]);
+        Message("\n ---      Validation is done!      ---\n");
+    }
+    
 #endif
 }
