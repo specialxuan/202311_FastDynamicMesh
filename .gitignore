@@ -6,3 +6,5 @@ libudf/*
 *.bat
 *.log
 *.trn
+*.msh
+*.cas.h5
