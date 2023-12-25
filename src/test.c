@@ -48,7 +48,7 @@ int read_coor_mode(double *elas_mode, const int row, const int column, const int
 
 int read_row_column(int *row, int *column)
 {
-#if !NODE
+#if !RP_NODE
     FILE *fpInput = NULL; // file pointer
     double n_node = 0, n_mode = 0;
     fpInput = fopen("mode/NodeCoor.csv", "r"); // open the file in the read-only mode
@@ -124,9 +124,16 @@ DEFINE_ON_DEMAND(Preprocess)
     Message(" ***      End:   This is Host      ***\n");
 #endif
 
-    //     host_to_node_int_1(fileStatus);
-    //     if (fileStatus == 0)
-    //         host_to_node_double(elas_mode, row * column);
+    host_to_node_int_1(fileStatus);
+    if (fileStatus == 0)
+    {
+        host_to_node_int_2(row, column);
+#if !RP_HOST
+        elas_mode = (double *)malloc(row * column * sizeof(double)); // allocate memory for elas_mode
+        memset(elas_mode, 0, row * column * sizeof(double));         // initialize elas_mode
+#endif
+        host_to_node_double(elas_mode, row * column);
+    }
 
     // #if !RP_HOST // TODO: add ! when compile
     //     Message("\n +++      Begin: This is Node      +++\n");
