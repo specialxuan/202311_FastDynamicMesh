@@ -10,3 +10,4 @@ libudf/*
 *.cas.h5
 mode/Mode.*
 *.tmp
+outputNode*.csv

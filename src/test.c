@@ -1,6 +1,6 @@
 /**
  * @file test.c
- * @author Bronya19c
+ * @author SpecialXuan
  * @brief
  * @version 0.1
  * @date 2023-01-13
@@ -208,11 +208,11 @@ DEFINE_ON_DEMAND(Preprocess)
 
                         if (this_node != NULL)
                         {
-                            // for (int i = 0; i < column; i++)
-                            // {
-                            //     N_UDMI(pNode, i) = this_node[i];
-                            //     fprintf(fpOutput, " %f,", this_node[i]);
-                            // }
+                            for (int i = 0; i < column; i++)
+                            {
+                                N_UDMI(pNode, i) = this_node[i];
+                                fprintf(fpOutput, " %f,", N_UDMI(pNode, i));
+                            }
                         }
                         else
                         {
