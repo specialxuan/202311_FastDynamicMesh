@@ -1,0 +1,162 @@
+/CLEAR
+/INPUT,'system','in'
+
+CMSEL,S,fluiddomain
+ESLN
+
+*GET,total_ele,ELEM,0,COUNT
+*dim,volu_stiffness,,total_ele,3
+*do,i,1,total_ele,1
+	*if,i,eq,1,then
+		*get,node_num,elem,0,num,min
+		*get,min_volu,elem,node_num,volu
+	*else
+		next_node=node_num
+		node_num=ELNEXT(next_node)
+	*endif
+	volu_stiffness(i,1)=node_num
+	*get,volu_stiffness(i,2),elem,node_num,volu
+	volu_stiffness(i,3)=0
+	*if,volu_stiffness(i,2),lt,min_volu,then
+		min_volu=volu_stiffness(i,2)
+	*endif
+*enddo
+
+*do,j,1,total_ele
+	volu_stiffness(j,3)=min_volu/volu_stiffness(j,2)
+*enddo
+finish
+
+/prep7
+!第一个用s，后面要用a
+allsel
+cmsel,s,top,node
+cmsel,a,bottom_fluid,node
+cmsel,a,left,node
+cmsel,a,right,node
+cmsel,a,bottom_solid,node
+d,all,all
+
+cmsel,s,side1,node
+cmsel,a,side2,node
+cmsel,a,front,node
+cmsel,a,back,node
+d,all,uz
+
+CMSEL,S,fsi_solid
+ESLN ! select element if the node is less
+CMSEL,S,fsi_fluid ! select node if node is more
+CEINTF,1.2,,,,,,0.05
+alls
+!把两个面约束住
+
+/prep7
+mp,dens,3,0
+mp,ex,3,2
+mp,prxy,3,0
+CMSEL,S,fluiddomain
+ESLN
+emodif,all,mat,3
+
+*do,k,1,total_ele,1
+	mat_num=volu_stiffness(k,1)
+	mp,dens,mat_num,0 ! make sure that no element number is 1, 2, or 3
+	mp,ex,mat_num,2*(volu_stiffness(k,3)**2.5)
+	mp,prxy,mat_num,0
+	emodif,volu_stiffness(k,1),mat,mat_num
+*enddo
+finish
+
+FINISH 
+/SOL
+ANTYPE,2
+MODOPT,LANB,10
+EQSLV,SPAR  
+! MXPAND,10, , ,0 
+! LUMPM,0 
+! PSTRES,0
+MODOPT,LANB,10,0,0, ,OFF
+
+alls
+!求解
+/STATUS,SOLU
+SOLVE   
+
+
+!后处理，提取各阶模态位移
+! FINISH  
+! /POST1  
+! SET,,, ,,, ,1  
+! PRNSOL,U,COMP   
+! SET,,, ,,, ,2   
+! PRNSOL,U,COMP   
+! SET,,, ,,, ,3  
+! PRNSOL,U,COMP
+! SET,,, ,,, ,4  
+! PRNSOL,U,COMP   
+! SET,,, ,,, ,5   
+! PRNSOL,U,COMP   
+! !把弹出来对话框里面的复制到excel就可以处理了
+
+/prep7
+*set, all, , ! clear all parameters
+
+/post1
+CMSEL,S,fluiddomain
+! ESLN
+*GET,N_Node,node,0,count,,, ! get the number of nodes
+*get, N_Modes, active, 0, set, nset ! get the number of sets
+
+*dim, NodeCoorDisp, table, N_Node, 3 ! define a table to store data
+NodeCoorDisp(0,0) = 0
+NodeCoorDisp(0,1) = N_Node
+NodeCoorDisp(0,2) = N_Modes
+
+*DO,i_Node,1,N_Node
+*GET,N_X,NODE,i_Node,LOC,X
+*GET,N_Y,NODE,i_Node,LOC,Y
+*GET,N_Z,NODE,i_Node,LOC,Z
+NodeCoorDisp(i_Node, 0) = N_X
+NodeCoorDisp(i_Node, 1) = N_Y
+NodeCoorDisp(i_Node, 2) = N_Z
+*ENDDO
+
+*cfopen, NodeCoor, csv
+*vwrite, NodeCoorDisp(0, 0), NodeCoorDisp(0, 1), NodeCoorDisp(0, 2)
+(F20.10, ",", F20.10, ",", F20.10, ",")
+*CFCLOS
+
+*set, i_SET, 1
+set, first ! read the first data set
+NodeCoorDisp(0,0) = i_SET
+*DO,i_Node,1,N_Node
+*GET,N_UX,NODE,i_Node,U,X
+*GET,N_UY,NODE,i_Node,U,Y
+*GET,N_UZ,NODE,i_Node,U,Z
+NodeCoorDisp(i_Node, 0) = N_UX
+NodeCoorDisp(i_Node, 1) = N_UY
+NodeCoorDisp(i_Node, 2) = N_UZ
+*ENDDO
+
+*cfopen, NodeDisp%i_SET%, csv
+*vwrite, NodeCoorDisp(0, 0), NodeCoorDisp(0, 1), NodeCoorDisp(0, 2)
+(E20.10, ",", E20.10, ",", E20.10, ",")
+*CFCLOS
+
+*DO,i_SET,2,N_Modes
+SET, next
+NodeCoorDisp(0,0) = i_SET
+*DO,i_Node,1,N_Node
+*GET,N_UX,NODE,i_Node,U,X
+*GET,N_UY,NODE,i_Node,U,Y
+*GET,N_UZ,NODE,i_Node,U,Z
+NodeCoorDisp(i_Node, 0) = N_UX
+NodeCoorDisp(i_Node, 1) = N_UY
+NodeCoorDisp(i_Node, 2) = N_UZ
+*ENDDO
+
+*cfopen, NodeDisp%i_SET%, csv
+*vwrite, NodeCoorDisp(0, 0), NodeCoorDisp(0, 1), NodeCoorDisp(0, 2)
+(E20.10, ",", E20.10, ",", E20.10, ",")
+*CFCLOS
+*ENDDO

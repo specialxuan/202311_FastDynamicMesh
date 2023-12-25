@@ -8,3 +8,5 @@ libudf/*
 *.trn
 *.msh
 *.cas.h5
+mode/Mode.*
+*.tmp
