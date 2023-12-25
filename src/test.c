@@ -72,6 +72,15 @@ int read_row_column(int *row, int *column)
     return 0;
 }
 
+int cmp_node(const void *a, const void *b)
+{
+    const double *da = (double *)a, *db = (double *)b;
+    int xCmp = *(da + 0) < *(db + 0) ? -1 : *(da + 0) > *(db + 0) ? 1 : 0;
+    int yCmp = *(da + 1) < *(db + 1) ? -1 : *(da + 1) > *(db + 1) ? 1 : 0;
+    int zCmp = *(da + 2) < *(db + 2) ? -1 : *(da + 2) > *(db + 2) ? 1 : 0;
+    return xCmp ? xCmp : yCmp ? yCmp : zCmp ? zCmp : 0;
+}
+
 static int iter_index = 1; // record the number of the iteration steps
 static int time_index = 0; // record the number of the time steps
 
@@ -108,6 +117,8 @@ DEFINE_ON_DEMAND(Preprocess)
                 Message(" Error: %d in %d\n", fileStatus, i_Mode);
             }
         }
+
+        qsort(elas_mode, row, column * sizeof(double), cmp_node);
 
         if (fileStatus == 0)
         {
@@ -172,7 +183,7 @@ DEFINE_ON_DEMAND(Preprocess)
                     pNode = C_NODE(cell, thread, n);
                     // set the value of the first user define node memory as 0
                     // used to identify if the node has stored the shape information or not
-                    N_UDMI(pNode, 12) = 0;
+                    N_UDMI(pNode, column) = 0;
                 }
             }
             end_c_loop(cell, thread)
@@ -184,7 +195,7 @@ DEFINE_ON_DEMAND(Preprocess)
                 c_node_loop(cell, thread, n)
                 {
                     pNode = C_NODE(cell, thread, n);
-                    if (N_UDMI(pNode, 12) == 0)
+                    if (N_UDMI(pNode, column) == 0)
                     {
                         nCoor[nCount * 4 + 0] = nCount + 1;
                         nCoor[nCount * 4 + 1] = NODE_X(pNode);
@@ -193,7 +204,7 @@ DEFINE_ON_DEMAND(Preprocess)
 
                         // fprintf(fpOutput, "%d,", nCount + 1);
                         fprintf(fpOutput, "%f, %f, %f, %f,\n", nCoor[nCount * 4 + 0], nCoor[nCount * 4 + 1], nCoor[nCount * 4 + 2], nCoor[nCount * 4 + 3]);
-                        N_UDMI(pNode, 12) = 1;
+                        N_UDMI(pNode, column) = 1;
                         nCount++;
                         // if (myid == 0)
                         // {
