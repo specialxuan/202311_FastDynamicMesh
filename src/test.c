@@ -147,95 +147,95 @@ DEFINE_ON_DEMAND(Preprocess)
         host_to_node_double(elas_mode, row * column);
     }
 
-    #if !RP_HOST // TODO: add ! when compile
-        Message("\n +++      Begin: This is Node      +++\n");
+#if !RP_HOST // TODO: add ! when compile
+    Message("\n +++      Begin: This is Node      +++\n");
 
-        Domain *domain;
-        cell_t cell;
-        Thread *thread;
-        Node *pNode;
+    Domain *domain;
+    cell_t cell;
+    Thread *thread;
+    Node *pNode;
 
-        int n = 0, node_count = 0; // total number of node
-        double node_coor[3] = {0}, *this_node = NULL;
+    int n = 0, node_count = 0; // total number of node
+    double node_coor[3] = {0}, *this_node = NULL;
 
-        char outFileName[20] = {0}; // output file name
-        sprintf(outFileName, "outputNode%d.csv", myid);
-        FILE *fpOutput = fopen(outFileName, "w+");
+    char outFileName[20] = {0}; // output file name
+    sprintf(outFileName, "outputNode%d.csv", myid);
+    FILE *fpOutput = fopen(outFileName, "w+");
 
-        domain = Get_Domain(1); // for single-phase flows, domain_id is 1 and Get_Domain(1) returns the fluid domain pointer
-        if (fileStatus == 0)
+    domain = Get_Domain(1); // for single-phase flows, domain_id is 1 and Get_Domain(1) returns the fluid domain pointer
+    if (fileStatus == 0)
+    {
+        Message(" ---    The elas_mode array is:    ---\n"); // validation for the initialization of the elas_mode
+        for (int i = 0; i < column; i++)                     // print variables
+            if (i == 0)
+                Message("%f \t", elas_mode[3 * column + i]);
+            else
+                Message("%f \t", elas_mode[3 * column + i]);
+        Message(" ---      Validation is done!      ---\n");
+    }
+
+    thread_loop_c(thread, domain)
+    {
+        begin_c_loop(cell, thread)
         {
-            Message(" ---    The elas_mode array is:    ---\n"); // validation for the initialization of the elas_mode
-            for (int i = 0; i < column; i++)                     // print variables
-                if (i == 0)
-                    Message("%f \t", elas_mode[3 * column + i]);
-                else
-                    Message("%f \t", elas_mode[3 * column + i]);
-            Message(" ---      Validation is done!      ---\n");
-        }
-
-        thread_loop_c(thread, domain)
-        {
-            begin_c_loop(cell, thread)
+            c_node_loop(cell, thread, n)
             {
-                c_node_loop(cell, thread, n)
-                {
-                    pNode = C_NODE(cell, thread, n);
-                    // set the value of the first user define node memory as 0
-                    // used to identify if the node has stored the shape information or not
-                    N_UDMI(pNode, column) = 0;
-                }
+                pNode = C_NODE(cell, thread, n);
+                // set the value of the first user define node memory as 0
+                // used to identify if the node has stored the shape information or not
+                N_UDMI(pNode, column) = 0;
             }
-            end_c_loop(cell, thread)
         }
-        thread_loop_c(thread, domain)
+        end_c_loop(cell, thread)
+    }
+    thread_loop_c(thread, domain)
+    {
+        begin_c_loop(cell, thread)
         {
-            begin_c_loop(cell, thread)
+            c_node_loop(cell, thread, n)
             {
-                c_node_loop(cell, thread, n)
+                pNode = C_NODE(cell, thread, n);
+                if (N_UDMI(pNode, column) == 0)
                 {
-                    pNode = C_NODE(cell, thread, n);
-                    if (N_UDMI(pNode, column) == 0)
+                    node_coor[0] = NODE_X(pNode);
+                    node_coor[1] = NODE_Y(pNode);
+                    node_coor[2] = NODE_Z(pNode);
+
+                    this_node = (double *)bsearch(node_coor, elas_mode, row, column * sizeof(double), cmp_node);
+
+                    // fprintf(fpOutput, "%d,", nCount + 1);
+                    // fprintf(fpOutput, "%f, %f, %f, %f, %f, %f,\n", this_node[0], this_node[1], this_node[2], this_node[3], this_node[4], this_node[5]);
+
+                    if (this_node != NULL)
                     {
-                        node_coor[0] = NODE_X(pNode);
-                        node_coor[1] = NODE_Y(pNode);
-                        node_coor[2] = NODE_Z(pNode);
-
-                        this_node = (double *)bsearch(node_coor, elas_mode, row, column * sizeof(double), cmp_node);
-
-                        // fprintf(fpOutput, "%d,", nCount + 1);
-                        // fprintf(fpOutput, "%f, %f, %f, %f, %f, %f,\n", this_node[0], this_node[1], this_node[2], this_node[3], this_node[4], this_node[5]);
-
-                        if (this_node != NULL)
+                        for (int i = 0; i < column; i++)
                         {
-                            for (int i = 0; i < column; i++)
-                            {
-                                N_UDMI(pNode, i) = this_node[i];
-                                fprintf(fpOutput, " %f,", N_UDMI(pNode, i));
-                            }
+                            N_UDMI(pNode, i) = this_node[i];
+                            fprintf(fpOutput, " %f,", N_UDMI(pNode, i));
                         }
-                        else
-                        {
-                            fprintf(fpOutput, " %f, %f, %f", node_coor[0], node_coor[1], node_coor[2]);
-                        }
-                        
-
-                        fprintf(fpOutput, "\n");
-                        N_UDMI(pNode, column) = 1;
-                        node_count++;
-                        // if (myid == 0)
-                        // {
-                        //     Message("%d\n", nCount);
-                        // }
                     }
+                    else
+                    {
+                        fprintf(fpOutput, " %f, %f, %f", node_coor[0], node_coor[1], node_coor[2]);
+                    }
+                    
 
+                    fprintf(fpOutput, "\n");
+                    N_UDMI(pNode, column) = 1;
+                    node_count++;
+                    // if (myid == 0)
+                    // {
+                    //     Message("%d\n", nCount);
+                    // }
                 }
-            }
-            end_c_loop(cell, thread)
-        }
-        fclose(fpOutput);
-        Message("Total Number of nodes in NODE %d is %d\n", myid, node_count);
 
-        Message(" +++      End:   This is Node      +++\n");
-    #endif
+            }
+        }
+        end_c_loop(cell, thread)
+    }
+    fclose(fpOutput);
+    Message("Total Number of nodes in NODE %d is %d\n", myid, node_count);
+
+    Message(" +++      End:   This is Node      +++\n");
+#endif
 }
