@@ -11,6 +11,7 @@
 
 #include <math.h>
 #include "udf.h" // note: move udf.h to the last
+#define NODE_MATCH_TOLERANCE 1e-6
 
 // define the read_mode()  to read input the array from the .txt file
 int read_coor_mode(double *elas_mode, const int row, const int column, const int i_Mode)
@@ -75,9 +76,9 @@ int read_row_column(int *row, int *column)
 int cmp_node(const void *a, const void *b)
 {
     const double *da = (double *)a, *db = (double *)b;
-    int xCmp = *(da + 0) < *(db + 0) ? -1 : *(da + 0) > *(db + 0) ? 1 : 0;
-    int yCmp = *(da + 1) < *(db + 1) ? -1 : *(da + 1) > *(db + 1) ? 1 : 0;
-    int zCmp = *(da + 2) < *(db + 2) ? -1 : *(da + 2) > *(db + 2) ? 1 : 0;
+    int xCmp = *(da + 0) - *(db + 0) < -NODE_MATCH_TOLERANCE ? -1 : *(da + 0) - *(db + 0) > NODE_MATCH_TOLERANCE ? 1 : 0;
+    int yCmp = *(da + 1) - *(db + 1) < -NODE_MATCH_TOLERANCE ? -1 : *(da + 1) - *(db + 1) > NODE_MATCH_TOLERANCE ? 1 : 0;
+    int zCmp = *(da + 2) - *(db + 2) < -NODE_MATCH_TOLERANCE ? -1 : *(da + 2) - *(db + 2) > NODE_MATCH_TOLERANCE ? 1 : 0;
     return xCmp ? xCmp : yCmp ? yCmp : zCmp ? zCmp : 0;
 }
 
@@ -154,9 +155,8 @@ DEFINE_ON_DEMAND(Preprocess)
         Thread *thread;
         Node *pNode;
 
-        int n = 0, nCount = 0; // total number of node
-        double *nCoor = (double *)malloc(row * 4 * sizeof(double));
-        memset(nCoor, 0, row * 4 * sizeof(double));
+        int n = 0, node_count = 0; // total number of node
+        double node_coor[3] = {0}, *this_node = NULL;
 
         char outFileName[20] = {0}; // output file name
         sprintf(outFileName, "outputNode%d.csv", myid);
@@ -197,15 +197,32 @@ DEFINE_ON_DEMAND(Preprocess)
                     pNode = C_NODE(cell, thread, n);
                     if (N_UDMI(pNode, column) == 0)
                     {
-                        nCoor[nCount * 4 + 0] = nCount + 1;
-                        nCoor[nCount * 4 + 1] = NODE_X(pNode);
-                        nCoor[nCount * 4 + 2] = NODE_Y(pNode);
-                        nCoor[nCount * 4 + 3] = NODE_Z(pNode);
+                        node_coor[0] = NODE_X(pNode);
+                        node_coor[1] = NODE_Y(pNode);
+                        node_coor[2] = NODE_Z(pNode);
+
+                        this_node = (double *)bsearch(node_coor, elas_mode, row, column * sizeof(double), cmp_node);
 
                         // fprintf(fpOutput, "%d,", nCount + 1);
-                        fprintf(fpOutput, "%f, %f, %f, %f,\n", nCoor[nCount * 4 + 0], nCoor[nCount * 4 + 1], nCoor[nCount * 4 + 2], nCoor[nCount * 4 + 3]);
+                        // fprintf(fpOutput, "%f, %f, %f, %f, %f, %f,\n", this_node[0], this_node[1], this_node[2], this_node[3], this_node[4], this_node[5]);
+
+                        if (this_node != NULL)
+                        {
+                            // for (int i = 0; i < column; i++)
+                            // {
+                            //     N_UDMI(pNode, i) = this_node[i];
+                            //     fprintf(fpOutput, " %f,", this_node[i]);
+                            // }
+                        }
+                        else
+                        {
+                            fprintf(fpOutput, " %f, %f, %f", node_coor[0], node_coor[1], node_coor[2]);
+                        }
+                        
+
+                        fprintf(fpOutput, "\n");
                         N_UDMI(pNode, column) = 1;
-                        nCount++;
+                        node_count++;
                         // if (myid == 0)
                         // {
                         //     Message("%d\n", nCount);
@@ -217,7 +234,7 @@ DEFINE_ON_DEMAND(Preprocess)
             end_c_loop(cell, thread)
         }
         fclose(fpOutput);
-        Message("Total Number of nodes in NODE %d is %d\n", myid, nCount);
+        Message("Total Number of nodes in NODE %d is %d\n", myid, node_count);
 
         Message(" +++      End:   This is Node      +++\n");
     #endif
