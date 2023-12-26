@@ -3,7 +3,6 @@ build/*
 exe/*
 Fluent/*
 libudf/*
-*.bat
 *.log
 *.trn
 *.msh
@@ -11,3 +10,4 @@ libudf/*
 mode/Mode.*
 *.tmp
 outputNode*.csv
+cleanup*

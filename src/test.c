@@ -13,6 +13,24 @@
 #include "udf.h" // note: move udf.h to the last
 #define NODE_MATCH_TOLERANCE 1e-6
 
+DEFINE_ON_DEMAND(ModeCalculation)
+{
+#if !RP_NODE
+    Message("\n ***      Begin: This is Host      ***\n");
+
+    system("ModeCalculation.bat");
+    FILE *fp;
+    fp = fopen("mode/NodeCoor.csv", "r");
+    if (fp)
+        Message("Mode files generated\n");
+    else
+        Message("Error: No mode files generated\n");
+    fclose(fp);
+
+    Message(" ***      End:   This is Host      ***\n");
+#endif
+}
+
 // define the read_mode()  to read input the array from the .txt file
 int read_coor_mode(double *elas_mode, const int row, const int column, const int i_Mode)
 {
@@ -121,16 +139,16 @@ DEFINE_ON_DEMAND(Preprocess)
 
         qsort(elas_mode, row, column * sizeof(double), cmp_node);
 
-        if (fileStatus == 0)
-        {
-            Message(" ---    The elas_mode array is:    ---\n"); // validation for the initialization of the elas_mode
-            for (int i = 0; i < column; i++)                     // print variables
-                if (i == 0)
-                    Message("%e \t", elas_mode[3 * column + i]);
-                else
-                    Message("%e \t", elas_mode[3 * column + i]);
-            Message(" ---      Validation is done!      ---\n");
-        }
+        // if (fileStatus == 0)
+        // {
+        //     Message(" ---    The elas_mode array is:    ---\n"); // validation for the initialization of the elas_mode
+        //     for (int i = 0; i < column; i++)                     // print variables
+        //         if (i == 0)
+        //             Message("%e \t", elas_mode[3 * column + i]);
+        //         else
+        //             Message("%e \t", elas_mode[3 * column + i]);
+        //     Message(" ---      Validation is done!      ---\n");
+        // }
     }
 
     Message(" ***      End:   This is Host      ***\n");
@@ -163,16 +181,16 @@ DEFINE_ON_DEMAND(Preprocess)
     FILE *fpOutput = fopen(outFileName, "w+");
 
     domain = Get_Domain(1); // for single-phase flows, domain_id is 1 and Get_Domain(1) returns the fluid domain pointer
-    if (fileStatus == 0)
-    {
-        Message(" ---    The elas_mode array is:    ---\n"); // validation for the initialization of the elas_mode
-        for (int i = 0; i < column; i++)                     // print variables
-            if (i == 0)
-                Message("%f \t", elas_mode[3 * column + i]);
-            else
-                Message("%f \t", elas_mode[3 * column + i]);
-        Message(" ---      Validation is done!      ---\n");
-    }
+    // if (fileStatus == 0)
+    // {
+    //     Message(" ---    The elas_mode array is:    ---\n"); // validation for the initialization of the elas_mode
+    //     for (int i = 0; i < column; i++)                     // print variables
+    //         if (i == 0)
+    //             Message("%f \t", elas_mode[3 * column + i]);
+    //         else
+    //             Message("%f \t", elas_mode[3 * column + i]);
+    //     Message(" ---      Validation is done!      ---\n");
+    // }
 
     thread_loop_c(thread, domain)
     {
@@ -203,30 +221,22 @@ DEFINE_ON_DEMAND(Preprocess)
 
                     this_node = (double *)bsearch(node_coor, elas_mode, row, column * sizeof(double), cmp_node);
 
-                    // fprintf(fpOutput, "%d,", nCount + 1);
-                    // fprintf(fpOutput, "%f, %f, %f, %f, %f, %f,\n", this_node[0], this_node[1], this_node[2], this_node[3], this_node[4], this_node[5]);
-
                     if (this_node != NULL)
                     {
                         for (int i = 0; i < column; i++)
                         {
                             N_UDMI(pNode, i) = this_node[i];
-                            fprintf(fpOutput, " %f,", N_UDMI(pNode, i));
+                            fprintf(fpOutput, " %10.5e,", N_UDMI(pNode, i));
                         }
                     }
                     else
                     {
-                        fprintf(fpOutput, " %f, %f, %f", node_coor[0], node_coor[1], node_coor[2]);
+                        fprintf(fpOutput, "Error: no node at (%f, %f, %f)", node_coor[0], node_coor[1], node_coor[2]);
                     }
-                    
 
                     fprintf(fpOutput, "\n");
                     N_UDMI(pNode, column) = 1;
                     node_count++;
-                    // if (myid == 0)
-                    // {
-                    //     Message("%d\n", nCount);
-                    // }
                 }
 
             }

@@ -1,0 +1,1 @@
+"C:\Program Files\ANSYS Inc\v221\ansys\bin\winx64\MAPDL.EXE" -lch -p ansys -smp -np 4 -dir "C:\WorkSpace\202311_FastDynamicMesh\mode" -j Mode -i "C:\WorkSpace\202311_FastDynamicMesh\mode\ModeCalculation.apdl" -o "C:\WorkSpace\202311_FastDynamicMesh\mode\Mode.out" -b -l en-us -s read

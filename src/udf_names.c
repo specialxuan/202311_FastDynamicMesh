@@ -4,8 +4,10 @@
 #include "udf.h"
 #include "prop.h"
 #include "dpm.h"
-extern DEFINE_ON_DEMAND(Preprocess) ;
-__declspec(dllexport) UDF_Data udf_data[] = {
+extern DEFINE_ON_DEMAND(ModeCalculation);
+extern DEFINE_ON_DEMAND(Preprocess);
+ __declspec(dllexport) UDF_Data udf_data[] = {
+{"ModeCalculation", (void (*)(void))ModeCalculation, UDF_TYPE_ON_DEMAND},
 {"Preprocess", (void (*)(void))Preprocess, UDF_TYPE_ON_DEMAND},
 };
 __declspec(dllexport) int n_udf_data = sizeof(udf_data)/sizeof(UDF_Data);

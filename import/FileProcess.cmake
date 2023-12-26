@@ -3,7 +3,7 @@ foreach(CFILE ${CSOURCES})
     foreach(LINE ${SOURCE_STR})
         if(LINE MATCHES "^ *DEFINE_[_A-Z]*\\(.*\\)")
             string(REGEX REPLACE "^ *(DEFINE_[_A-Z]*\\(.*\\))"
-                "extern \\1" F_DEF ${LINE})
+                "extern \\1;\n" F_DEF ${LINE})
             list(APPEND FUNCTION_DEFS ${F_DEF})
             string(REGEX REPLACE "^ *DEFINE_([_A-Z]*)\\( *([_a-zA-Z0-9]*).*\\)"
                 "{\"\\2\", (void (*)(void))\\2, UDF_TYPE_\\1},\n" F_ARR ${LINE})
@@ -15,8 +15,8 @@ endforeach(CFILE)
 message("FUNCTION_DEFS: ${FUNCTION_DEFS}")
 message("FUNCTION_ARRS: ${FUNCTION_ARRS}")
 
-# string(REPLACE "\n {" "\;\n" FUNCTION_DEFS ${FUNCTION_DEFS})
-# string(REPLACE "\n {" "\n" FUNCTION_ARRS ${FUNCTION_ARRS})
+string(REPLACE "\n" "\;\n" FUNCTION_DEFS ${FUNCTION_DEFS})
+string(REPLACE "\n" "\n" FUNCTION_ARRS ${FUNCTION_ARRS})
 
 set(UDFNAMES_CONTENT
     "/* This file generated automatically. */\n"
@@ -25,7 +25,7 @@ set(UDFNAMES_CONTENT
     "#include \"udf.h\"\n"
     "#include \"prop.h\"\n"
     "#include \"dpm.h\"\n"
-    "${FUNCTION_DEFS} \;\n;"
+    "${FUNCTION_DEFS} ;"
     "__declspec(dllexport) UDF_Data udf_data[] = {\n"
     "${FUNCTION_ARRS}"
     "}\;\n"
