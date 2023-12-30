@@ -1,4 +1,4 @@
-set(CSOURCES test.c)    # C源文件 # 更改
+set(CSOURCES FastDynamicMesh.c)    # C源文件 # 更改
 set(CHEADERS)           # C头文件 # 更改
 set(USER_OBJECTS)       # obj文件 # 更改
 set(THIRD_LIBS)         # 第三方库 # 更改
