@@ -14,15 +14,16 @@
 #define NODE_MATCH_TOLERANCE 1e-6
 
 /**
- * @brief input node coordinates and modal displacement
+ * @brief HOST_ONLY input node coordinates and modal displacement
  *
  * @param nodeCoorDisp node coordinates and modal displacements
+ * @param modeFreq mode frequency
  * @param row row of nodeCoorDisp
  * @param column column of nodeCoorDisp
  * @param iMode which mode to input
  * @return int
  */
-int read_coor_mode(double *nodeCoorDisp, const int row, const int column, const int iMode)
+int read_coor_mode(double *nodeCoorDisp, real *modeFreq, const int row, const int column, const int iMode)
 {
 #if !RP_NODE                                        // run in host process
     char inFileName[20] = {0}, line_buf[256] = {0}; // input file name, ignore first line
@@ -34,17 +35,20 @@ int read_coor_mode(double *nodeCoorDisp, const int row, const int column, const 
     FILE *fpInput = fopen(inFileName, "r"); // open the file in the read-only mode
     if (fpInput == NULL)                    // file not exists, print error
     {
-        Message("UDF: Error: No file.\n");
+        Message("UDF[Host]: Error: No file.\n");
         return 1;
     }
 
+    if (iMode > 0)
+        fscanf(fpInput, "%lf,", modeFreq + iMode - 1); // read mode frequency
+    
     fgets(line_buf, 256, fpInput); // ignore first line
     for (int i = 0; i < row; i++)  // fill the array of node coordinates and modal displacements
         if (fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * 3 + 0) <= 0 ||
             fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * 3 + 1) <= 0 ||
             fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * 3 + 2) <= 0) // data missing, print error
         {
-            Message("UDF: Error: Lack of variables in Mode %d, Node %d.\n", iMode, i);
+            Message("UDF[Host]: Error: Lack of variables in Mode %d, Node %d.\n", iMode, i);
             fclose(fpInput);
             return 2;
         }
@@ -56,7 +60,7 @@ int read_coor_mode(double *nodeCoorDisp, const int row, const int column, const 
 }
 
 /**
- * @brief input size of node coordinates and modal displacement
+ * @brief HOST_ONLY input size of node coordinates and modal displacement
  *
  * @param row row of nodeCoorDisp
  * @param column column of nodeCoorDisp
@@ -69,14 +73,14 @@ int read_row_column(int *row, int *column)
     FILE *fpInput = fopen("mode/NodeCoor.csv", "r"); // open the file in the read-only mode
     if (fpInput == NULL)                             // file not exists, print error
     {
-        Message("UDF:  ---        Error: No file.        ---\n");
+        Message("UDF[Host]: Error: No file.\n");
         return 1;
     }
     if (fscanf(fpInput, "%lf,", &nNode) <= 0 || // ignore first number
         fscanf(fpInput, "%lf,", &nNode) <= 0 || // input number of nodes
         fscanf(fpInput, "%lf,", &nMode) <= 0)   // input number of modes
     {
-        Message("UDF:  ---   Error: Lack of variables.   ---\n");
+        Message("UDF[Host]: Error: Lack of variables.\n");
         fclose(fpInput);
         return 2;
     }
@@ -105,7 +109,7 @@ int cmp_node(const void *a, const void *b)
 }
 
 /**
- * @brief fill node coordinate and modal displacement into UDMI
+ * @brief NODE_ONLY fill node coordinate and modal displacement into UDMI
  * 
  * @param nodeCoorDisp node coordinate and modal displacement
  * @param row row of nodeCoorDisp
@@ -120,7 +124,7 @@ int fill_modal_disp(const double *nodeCoorDisp, const int row, const int column)
     Node *pNode;     // pointer of node
 
     int iNode = 0, nodeCount = 0, UDMIColumn = column - 3; // node index, total number of node, columns of UDMI
-    double node_coor[3] = {0}, *thisNode = NULL;            // buffer of node coordinate, pointer of this node
+    double node_coor[3] = {0}, *thisNode = NULL;           // buffer of node coordinate, pointer of this node
 
     char outFileName[20] = {0};                     // output file name
     sprintf(outFileName, "outputNode%d.csv", myid); // output file name of each node process
@@ -129,7 +133,7 @@ int fill_modal_disp(const double *nodeCoorDisp, const int row, const int column)
     pDomain = Get_Domain(1);        // for single-phase flows, domain_id is 1 and Get_Domain(1) returns the fluid domain pointer
     thread_loop_c(pThread, pDomain) // loop thread in domain
     {
-        begin_c_loop(pCell, pThread) // loop cell in thread
+        begin_c_loop_int_ext(pCell, pThread) // loop cell in thread
         {
             c_node_loop(pCell, pThread, iNode) // loop node in cell
             {
@@ -137,11 +141,11 @@ int fill_modal_disp(const double *nodeCoorDisp, const int row, const int column)
                 N_UDMI(pNode, UDMIColumn) = 0;         // last column of UDMI is 0 indicates not set, 1 indicates set
             }
         }
-        end_c_loop(pCell, pThread) // finish cell loop
+        end_c_loop_int_ext(pCell, pThread) // finish cell loop
     }
     thread_loop_c(pThread, pDomain) // loop thread in domain
     {
-        begin_c_loop(pCell, pThread) // loop cell in thread
+        begin_c_loop_int_ext(pCell, pThread) // loop cell in thread
         {
             c_node_loop(pCell, pThread, iNode) // loop node in cell
             {
@@ -169,10 +173,10 @@ int fill_modal_disp(const double *nodeCoorDisp, const int row, const int column)
                 }
             }
         }
-        end_c_loop(pCell, pThread) // finish cell loop
+        end_c_loop_int_ext(pCell, pThread) // finish cell loop
     }
-    fclose(fpOutput);                                                          // close file
-    Message("UDF: Total Number of nodes in NODE %d is %d\n", myid, nodeCount); // print how many nodes in this process
+    fclose(fpOutput);                                                                // close file
+    Message("UDF[Node]: Total Number of nodes in NODE %d is %d\n", myid, nodeCount); // print how many nodes in this process
 
     return 0;
 }

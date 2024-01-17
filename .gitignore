@@ -3,11 +3,13 @@ build/*
 exe/*
 Fluent/*
 libudf/*
+mode/Mode*
+杂项/*
 *.log
 *.trn
 *.msh
 *.cas.h5
-mode/Mode.*
 *.tmp
 outputNode*.csv
 cleanup*
+*.jou

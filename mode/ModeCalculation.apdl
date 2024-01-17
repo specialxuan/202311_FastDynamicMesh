@@ -128,7 +128,8 @@ NodeCoorDisp(i_Node, 2) = N_Z
 
 *set, i_SET, 1
 set, first ! read the first data set
-NodeCoorDisp(0,0) = i_SET
+*GET,F_Mode,MODE,i_SET,FREQ,,,
+NodeCoorDisp(0,0) = F_Mode
 *DO,i_Node,1,N_Node
 *GET,N_UX,NODE,i_Node,U,X
 *GET,N_UY,NODE,i_Node,U,Y
@@ -145,7 +146,8 @@ NodeCoorDisp(i_Node, 2) = N_UZ
 
 *DO,i_SET,2,N_Modes
 SET, next
-NodeCoorDisp(0,0) = i_SET
+*GET,F_Mode,MODE,i_SET,FREQ,,,
+NodeCoorDisp(0,0) = F_Mode
 *DO,i_Node,1,N_Node
 *GET,N_UX,NODE,i_Node,U,X
 *GET,N_UY,NODE,i_Node,U,Y
