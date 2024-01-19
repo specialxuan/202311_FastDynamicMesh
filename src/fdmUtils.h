@@ -13,6 +13,42 @@
 #include "udf.h" // note: move udf.h to the last
 #define NODE_MATCH_TOLERANCE 1e-6
 
+static int iIter = 1; // record the number of the iteration steps
+static int iTime = 0; // record the number of the time steps
+
+static int nNode = 0;
+static int nMode = 0;
+static real *TimeSeq = NULL;      // time sequence
+static real *modeFreq = NULL;     // frequencies of the structure // TODO: read from file
+static real *modeForce = NULL;    // modal force
+static real *modeDisp = NULL;     // modal-displacement,modal-velocity,acceleration repeat
+static real *initVelocity = NULL; // initial modal velocity
+
+static const real Mass = 1;    // modal mass = 1, which means normalization of principal mass
+static const real Damp = 0;    // modal damping
+static const real Theta = 1.4; // wilson-theta method, the value of the theta
+
+static int idFSI = 19;   // record the id of the fsi faces, shown in fluent       // TODO: read from file
+static int idFluid = 11; // record the id of the fluid cell zone, shown in fluent // TODO: read from file
+
+/**
+ * @brief compare nodes in order of x, y, z
+ *
+ * @param a pointer of first node
+ * @param b pointer of second node
+ * @return int
+ */
+int cmp_node(const void * const a, const void * const b)
+{
+    const double *da = (double *)a, *db = (double *)b;
+    int xCmp = *(da + 0) - *(db + 0) < -NODE_MATCH_TOLERANCE ? -1 : *(da + 0) - *(db + 0) > NODE_MATCH_TOLERANCE ? 1 : 0; // compare x
+    int yCmp = *(da + 1) - *(db + 1) < -NODE_MATCH_TOLERANCE ? -1 : *(da + 1) - *(db + 1) > NODE_MATCH_TOLERANCE ? 1 : 0; // compare y
+    int zCmp = *(da + 2) - *(db + 2) < -NODE_MATCH_TOLERANCE ? -1 : *(da + 2) - *(db + 2) > NODE_MATCH_TOLERANCE ? 1 : 0; // compare z
+    return xCmp ? xCmp : yCmp ? yCmp : zCmp ? zCmp : 0; // if x, then y, then z, then equal
+}
+
+
+#if !RP_NODE
 /**
  * @brief HOST_ONLY input node coordinates and modal displacement
  *
@@ -23,9 +59,9 @@
  * @param iMode which mode to input
  * @return int
  */
-int read_coor_mode(double *nodeCoorDisp, real *modeFreq, const int row, const int column, const int iMode)
+int read_coor_mode(double * const nodeCoorDisp, real * const modeFreq, const int iMode)
 {
-#if !RP_NODE                                        // run in host process
+    const int row = nNode, column = (nMode + 1) * 3;
     char inFileName[20] = {0}, line_buf[256] = {0}; // input file name, ignore first line
     if (iMode == 0)
         sprintf(inFileName, "mode/NodeCoor.csv"); // read coordinate at first time
@@ -54,7 +90,6 @@ int read_coor_mode(double *nodeCoorDisp, real *modeFreq, const int row, const in
         }
 
     fclose(fpInput);
-#endif
 
     return 0;
 }
@@ -62,52 +97,35 @@ int read_coor_mode(double *nodeCoorDisp, real *modeFreq, const int row, const in
 /**
  * @brief HOST_ONLY input size of node coordinates and modal displacement
  *
- * @param row row of nodeCoorDisp
- * @param column column of nodeCoorDisp
  * @return int
  */
-int read_row_column(int *row, int *column)
+int read_row_column()
 {
-#if !RP_NODE                                         // run in host process
-    double nNode = 0, nMode = 0;                     // number of nodes, number of modes
+    double nNodeFromFile = 0, nModeFromFile = 0;                     // number of nodes, number of modes
     FILE *fpInput = fopen("mode/NodeCoor.csv", "r"); // open the file in the read-only mode
     if (fpInput == NULL)                             // file not exists, print error
     {
         Message("UDF[Host]: Error: No file.\n");
         return 1;
     }
-    if (fscanf(fpInput, "%lf,", &nNode) <= 0 || // ignore first number
-        fscanf(fpInput, "%lf,", &nNode) <= 0 || // input number of nodes
-        fscanf(fpInput, "%lf,", &nMode) <= 0)   // input number of modes
+    if (fscanf(fpInput, "%lf,", &nNodeFromFile) <= 0 || // ignore first number
+        fscanf(fpInput, "%lf,", &nNodeFromFile) <= 0 || // input number of nodes
+        fscanf(fpInput, "%lf,", &nModeFromFile) <= 0)   // input number of modes
     {
         Message("UDF[Host]: Error: Lack of variables.\n");
         fclose(fpInput);
         return 2;
     }
-    *row = (int)nNode;              // rows of node coordinates and modal displacement
-    *column = ((int)nMode + 1) * 3; // columns of node coordinates and modal displacement
+    nNode = (int)nNodeFromFile;              // rows of node coordinates and modal displacement
+    nMode = (int)nModeFromFile; // columns of node coordinates and modal displacement
     fclose(fpInput);
-#endif
 
     return 0;
 }
 
-/**
- * @brief compare nodes in order of x, y, z
- *
- * @param a pointer of first node
- * @param b pointer of second node
- * @return int
- */
-int cmp_node(const void *a, const void *b)
-{
-    const double *da = (double *)a, *db = (double *)b;
-    int xCmp = *(da + 0) - *(db + 0) < -NODE_MATCH_TOLERANCE ? -1 : *(da + 0) - *(db + 0) > NODE_MATCH_TOLERANCE ? 1 : 0; // compare x
-    int yCmp = *(da + 1) - *(db + 1) < -NODE_MATCH_TOLERANCE ? -1 : *(da + 1) - *(db + 1) > NODE_MATCH_TOLERANCE ? 1 : 0; // compare y
-    int zCmp = *(da + 2) - *(db + 2) < -NODE_MATCH_TOLERANCE ? -1 : *(da + 2) - *(db + 2) > NODE_MATCH_TOLERANCE ? 1 : 0; // compare z
-    return xCmp ? xCmp : yCmp ? yCmp : zCmp ? zCmp : 0; // if x, then y, then z, then equal
-}
+#endif
 
+#if !RP_HOST
 /**
  * @brief NODE_ONLY fill node coordinate and modal displacement into UDMI
  * 
@@ -116,13 +134,14 @@ int cmp_node(const void *a, const void *b)
  * @param column column of nodeCoorDisp
  * @return int 
  */
-int fill_modal_disp(const double *nodeCoorDisp, const int row, const int column)
+int fill_modal_disp(const double * const nodeCoorDisp)
 {
     Domain *pDomain; // pointer of domain
     cell_t pCell;    // pointer of cell
     Thread *pThread; // pointer of thread
     Node *pNode;     // pointer of node
 
+    const int row = nNode, column = (nMode + 1) * 3;
     int iNode = 0, nodeCount = 0, UDMIColumn = column - 3; // node index, total number of node, columns of UDMI
     double node_coor[3] = {0}, *thisNode = NULL;           // buffer of node coordinate, pointer of this node
 
@@ -180,3 +199,29 @@ int fill_modal_disp(const double *nodeCoorDisp, const int row, const int column)
 
     return 0;
 }
+
+// int get_press_vector(real * const modeForce, Domain * const pDomain)
+// {
+//     Thread *pThreadFSI = Lookup_Thread(pDomain, idFSI);
+//     face_t pFaceFSI;
+//     Node *pNode;
+//     real AreaVector[3] = {0}, Press = 0;
+//     int nNodePerFace = 0, iNode = 0;
+//     begin_f_loop(pFaceFSI, pThreadFSI)
+//     {
+//         F_AREA(AreaVector, pFaceFSI, pThreadFSI);
+//         Press = F_P(pFaceFSI, pThreadFSI);
+//         nNodePerFace = F_NNODES(pFaceFSI, pThreadFSI);
+//         f_node_loop(pFaceFSI, pThreadFSI, iNode)
+//         {
+//             pNode = F_NODE(pFaceFSI, pThreadFSI, iNode);
+//             for (int i = 0; i < nMode; i++)
+//             {
+//                 modeForce[i] += 1 / nNodePerFace;
+//             }          
+//         }
+//     }
+//     end_f_loop(pFaceFSI, pThreadFSI);
+// }
+
+#endif
