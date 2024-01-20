@@ -18,9 +18,9 @@
  */
 DEFINE_ON_DEMAND(ModeCalculation)
 {
-#if !RP_NODE                                 // run on host process
-    system("ModeCalculation.bat");           // execute apdl batch
-    if (read_row_column() == 0) // check if files generated
+#if !RP_NODE                       // run on host process
+    system("ModeCalculation.bat"); // execute apdl batch
+    if (read_row_column() == 0)    // check if files generated
         Message("UDF[Host]: Files Generated\n");
 #endif
 }
@@ -32,7 +32,7 @@ DEFINE_ON_DEMAND(ModeCalculation)
 DEFINE_ON_DEMAND(Preprocess)
 {
     int row = 0, column = 0, fileStatus = 0; // size of node coordinates and modal displacements, number of modes, status of input file(0 is noError, 1 is Missing files, 2 is Missing data
-    double *nodeCoorDisp = NULL;                        // node coordinates and modal displacements
+    double *nodeCoorDisp = NULL;             // node coordinates and modal displacements
 
     iIter = 1; // initialise iteration index
     iTime = 0; // initialise time index
@@ -41,10 +41,10 @@ DEFINE_ON_DEMAND(Preprocess)
     // RP_Set_Float(char *s, double v)-RP_Set_Float("flow-time", 0.2)
     RP_Set_Float("flow-time", 0); // set  flow time
 
-#if !RP_NODE                                              // run in host process
+#if !RP_NODE                                 // run in host process
     if (fileStatus = read_row_column() == 0) // input size of node coordinates and modal displacement
     {
-        row = nNode, column = (nMode + 1) * 3;                                           // number of modes
+        row = nNode, column = (nMode + 1) * 3;                              // number of modes
         Message("UDF[Host]: r = %d, c = %d, m = %d\n", row, column, nMode); // print size of node coordinates and modal displacement and number of modes
 
         nodeCoorDisp = (double *)malloc(row * column * sizeof(double)); // allocate memory for nodeCoorDisp
@@ -52,7 +52,7 @@ DEFINE_ON_DEMAND(Preprocess)
         modeFreq = (real *)malloc(nMode * sizeof(real));                // allocate memory for mode frequency
         memset(modeFreq, 0, nMode * sizeof(real));                      // initialize frequency
 
-        for (int iMode = 0; iMode < nMode + 1; iMode++)                                  // input each modal displacement
+        for (int iMode = 0; iMode < nMode + 1; iMode++)                     // input each modal displacement
             if (fileStatus = read_coor_mode(nodeCoorDisp, modeFreq, iMode)) // if file or data missing, print error
                 Message("UDF[Host]: Error: %d in %d\n", fileStatus, iMode);
 
@@ -99,14 +99,13 @@ DEFINE_ON_DEMAND(Preprocess)
 
 /**
  * @brief construct a new grid motion method
- * 
+ *
  */
 DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dtime)
 {
-    real * const modeDispThisTime = modeDisp + iTime * nMode * 3, modeDispBuff[nMode * 3];
-    real * const modeForceThisTime = modeForce + iTime * nMode, modeForceBuff[nMode];
-    memset(modeDispThisTime, 0, nMode * 3 * sizeof(real));
-    memset(modeDispBuff, 0, nMode * 3 * sizeof(real));
+    real *const modeDispThisTime = modeDisp + iTime * nMode * 3;                     // modal displacement this time, buffer
+    real *const modeForceThisTime = modeForce + iTime * nMode, modeForceBuff[nMode]; // modal force this time, buffer
+    memset(modeDispThisTime, 0, nMode * 3 * sizeof(real));                           // allocate memory
     memset(modeForceThisTime, 0, nMode * sizeof(real));
     memset(modeForceBuff, 0, nMode * sizeof(real));
 
@@ -118,47 +117,58 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dtime)
 #if !RP_HOST
     Message("\nUDF: +++      Begin: This is Node      +++\n");
 
-    get_mode_force(modeForceThisTime, pDomain);
+    get_mode_force(modeForceThisTime, pDomain); // get modal force
 
     Message("UDF: +++      End:   This is Node      +++\n");
 #endif
 
-    PRF_GRSUM(modeForceThisTime, nMode, modeForceBuff);
+    PRF_GRSUM(modeForceThisTime, nMode, modeForceBuff); // global summation fo modal force this time
 
 #if !RP_NODE
     Message("\nUDF: ***      Begin: This is Host      ***\n");
 
-    // if (iTime == 0)
-    // {
-    //     for (int i = 0; i < nMode; i++)
-    //     {
-    //         modeDisp[i * 3 + 0] = modeForceThisTime[i];
-    //         modeDisp[i * 3 + 1] = initVelocity[i];
-    //         modeDisp[i * 3 + 1] = 0;
-    //     }
-    // }
-    // else
-    // {
-    //     const real *const modeForceLastTime = modeForce + (iTime - 1) * nMode;
-    //     const real *const modeDispLastTime = modeDisp + (iTime - 1) * nMode * 3;
-    //     for (int i = 0; i < nMode; i++)
-    //     {
-    //         // // the calculation of modal displacement,  acceleration, velocity using wilson-theta method
-    //         // modeDispThisTime[3 * i] = modeForce[time_index - 1][i + 1] + theta * (modeForce[time_index][i + 1] - modeForce[time_index - 1][i + 1]);
-    //         // modeDispThisTime[3 * i] += m * (6 / SQR(theta * dtime) * mode_disp[time_index - 1][3 * i] + 6 / (theta * dtime) * mode_disp[time_index - 1][3 * i + 1] + 2 * mode_disp[time_index - 1][3 * i + 2]);
-    //         // modeDispThisTime[3 * i] += c * (3 / (theta * dtime) * mode_disp[time_index - 1][3 * i] + 2 * mode_disp[time_index - 1][3 * i + 1] + 0.5 * theta * dtime * mode_disp[time_index - 1][3 * i + 2]);
-    //         // modeDispThisTime[3 * i] /= 6 * m / SQR(theta * dtime) + 3 * c / (theta * dtime) + SQR(2 * Pi * freq[i]);
-    //         // // calculation of the acceleration
-    //         // modeDispThisTime[3 * i + 2] = 6 / (SQR(theta * dtime) * theta) * (modeDispThisTime[3 * i] - mode_disp[time_index - 1][3 * i]) - 6 / (SQR(theta) * dtime) * mode_disp[time_index - 1][3 * i + 1] + (1 - 3 / theta) * mode_disp[time_index - 1][3 * i + 2];
-    //         // // calculation of the velocity
-    //         // modeDispThisTime[3 * i + 1] = mode_disp[time_index - 1][3 * i + 1] + 0.5 * dtime * (modeDispThisTime[3 * i + 2] + mode_disp[time_index - 1][3 * i + 2]);
-    //         // // calculation of the displacement
-    //         // modeDispThisTime[3 * i] = mode_disp[time_index - 1][3 * i] + dtime * mode_disp[time_index - 1][3 * i + 1] + SQR(dtime) / 6 * (mode_disp[time_index][3 * i + 2] + 2 * mode_disp[time_index - 1][3 * i + 2]);
-    //     }
-    // }
+    if (iTime == 0) // initiate wilson-theta method
+    {
+        for (int i = 0; i < nMode; i++)
+        {
+            modeDisp[i * 3 + 0] = modeForceThisTime[i];
+            modeDisp[i * 3 + 1] = initVelocity[i];
+            modeDisp[i * 3 + 1] = 0;
+        }
+    }
+    else
+    {
+        const real *const modeForceLastTime = modeForce + (iTime - 1) * nMode;
+        const real *const modeDispLastTime = modeDisp + (iTime - 1) * nMode * 3;
+        for (int i = 0; i < nMode; i++)
+        {
+            real dis = 0, vel = 0, acc = 0;
+            const real disLast = modeDispLastTime[3 * i + 0],
+                       velLast = modeDispLastTime[3 * i + 1],
+                       accLast = modeDispLastTime[3 * i + 2];
+
+            // calculate modal displacement, acceleration, velocity using wilson-theta method
+            dis = modeForceLastTime[i] + Theta * (modeForceThisTime[i] - modeForceLastTime[i]);
+            dis += Mass * (6 / SQR(Theta * dtime) * disLast + 6 / (Theta * dtime) * velLast + 2 * accLast);
+            dis += Damp * (3 / (Theta * dtime) * disLast + 2 * velLast + 0.5 * Theta * dtime * accLast);
+            dis /= 6 * Mass / SQR(Theta * dtime) + 3 * Damp / (Theta * dtime) + SQR(2 * M_PI * modeFreq[i]);
+            // calculate acceleration
+            acc = 6 / (SQR(Theta * dtime) * Theta) * (dis - disLast) - 6 / (SQR(Theta) * dtime) * velLast + (1 - 3 / Theta) * accLast;
+            // calculate velocity
+            vel = velLast + 0.5 * dtime * (acc + accLast);
+            // calculate displacement
+            dis = disLast + dtime * velLast + SQR(dtime) / 6 * (acc + 2 * accLast);
+
+            modeDispThisTime[3 * i + 0] = dis;
+            modeDispThisTime[3 * i + 1] = vel;
+            modeDispThisTime[3 * i + 2] = acc;
+        }
+    }
 
     Message("UDF: ***      End:   This is Host      ***\n");
 #endif
+
+    host_to_node_real(modeDispThisTime, 3 * nMode); // broadcast modal displacement to node process
 }
 
 DEFINE_EXECUTE_AT_END(setting_next_time_step)
