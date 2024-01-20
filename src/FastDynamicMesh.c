@@ -97,30 +97,67 @@ DEFINE_ON_DEMAND(Preprocess)
     free(nodeCoorDisp);
 }
 
-// static real ini_vel[4] = {0, 0, 0, 0};   // initial modal velocity
-// static real mode_force[100000][5] = {0}; // modal force
-// static real mode_disp[100000][12] = {0}; // modal-displacement,modal-velocity,acceleration repeat
-
-DEFINE_GRID_MOTION(FDM_method, domain, dt, time, dtime)
+/**
+ * @brief construct a new grid motion method
+ * 
+ */
+DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dtime)
 {
+    real * const modeDispThisTime = modeDisp + iTime * nMode * 3, modeDispBuff[nMode * 3];
+    real * const modeForceThisTime = modeForce + iTime * nMode, modeForceBuff[nMode];
+    memset(modeDispThisTime, 0, nMode * 3 * sizeof(real));
+    memset(modeDispBuff, 0, nMode * 3 * sizeof(real));
+    memset(modeForceThisTime, 0, nMode * sizeof(real));
+    memset(modeForceBuff, 0, nMode * sizeof(real));
+
 #if !RP_NODE
     Message("\nUDF: ***      Begin: This is Host      ***\n");
 
     Message("UDF: ***      End:   This is Host      ***\n");
 #endif
-#if RP_HOST
+#if !RP_HOST
     Message("\nUDF: +++      Begin: This is Node      +++\n");
 
-    // Thread *tFSI = Lookup_Thread(domain, idFSI);
-    // Thread *tFLD = Lookup_Thread(domain, idFluid);
-    // cell_t cellFSI;
-    // face_t faceFSI;
-    // Node *nodeFSI;
-    // real nNodes, *Press, Area[3] = {0};
-
-    // memset(modeForce + iTime * 5, 0, 5 * sizeof(real));
+    get_mode_force(modeForceThisTime, pDomain);
 
     Message("UDF: +++      End:   This is Node      +++\n");
+#endif
+
+    PRF_GRSUM(modeForceThisTime, nMode, modeForceBuff);
+
+#if !RP_NODE
+    Message("\nUDF: ***      Begin: This is Host      ***\n");
+
+    // if (iTime == 0)
+    // {
+    //     for (int i = 0; i < nMode; i++)
+    //     {
+    //         modeDisp[i * 3 + 0] = modeForceThisTime[i];
+    //         modeDisp[i * 3 + 1] = initVelocity[i];
+    //         modeDisp[i * 3 + 1] = 0;
+    //     }
+    // }
+    // else
+    // {
+    //     const real *const modeForceLastTime = modeForce + (iTime - 1) * nMode;
+    //     const real *const modeDispLastTime = modeDisp + (iTime - 1) * nMode * 3;
+    //     for (int i = 0; i < nMode; i++)
+    //     {
+    //         // // the calculation of modal displacement,  acceleration, velocity using wilson-theta method
+    //         // modeDispThisTime[3 * i] = modeForce[time_index - 1][i + 1] + theta * (modeForce[time_index][i + 1] - modeForce[time_index - 1][i + 1]);
+    //         // modeDispThisTime[3 * i] += m * (6 / SQR(theta * dtime) * mode_disp[time_index - 1][3 * i] + 6 / (theta * dtime) * mode_disp[time_index - 1][3 * i + 1] + 2 * mode_disp[time_index - 1][3 * i + 2]);
+    //         // modeDispThisTime[3 * i] += c * (3 / (theta * dtime) * mode_disp[time_index - 1][3 * i] + 2 * mode_disp[time_index - 1][3 * i + 1] + 0.5 * theta * dtime * mode_disp[time_index - 1][3 * i + 2]);
+    //         // modeDispThisTime[3 * i] /= 6 * m / SQR(theta * dtime) + 3 * c / (theta * dtime) + SQR(2 * Pi * freq[i]);
+    //         // // calculation of the acceleration
+    //         // modeDispThisTime[3 * i + 2] = 6 / (SQR(theta * dtime) * theta) * (modeDispThisTime[3 * i] - mode_disp[time_index - 1][3 * i]) - 6 / (SQR(theta) * dtime) * mode_disp[time_index - 1][3 * i + 1] + (1 - 3 / theta) * mode_disp[time_index - 1][3 * i + 2];
+    //         // // calculation of the velocity
+    //         // modeDispThisTime[3 * i + 1] = mode_disp[time_index - 1][3 * i + 1] + 0.5 * dtime * (modeDispThisTime[3 * i + 2] + mode_disp[time_index - 1][3 * i + 2]);
+    //         // // calculation of the displacement
+    //         // modeDispThisTime[3 * i] = mode_disp[time_index - 1][3 * i] + dtime * mode_disp[time_index - 1][3 * i + 1] + SQR(dtime) / 6 * (mode_disp[time_index][3 * i + 2] + 2 * mode_disp[time_index - 1][3 * i + 2]);
+    //     }
+    // }
+
+    Message("UDF: ***      End:   This is Host      ***\n");
 #endif
 }
 

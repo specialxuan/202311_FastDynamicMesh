@@ -200,28 +200,39 @@ int fill_modal_disp(const double * const nodeCoorDisp)
     return 0;
 }
 
-// int get_press_vector(real * const modeForce, Domain * const pDomain)
-// {
-//     Thread *pThreadFSI = Lookup_Thread(pDomain, idFSI);
-//     face_t pFaceFSI;
-//     Node *pNode;
-//     real AreaVector[3] = {0}, Press = 0;
-//     int nNodePerFace = 0, iNode = 0;
-//     begin_f_loop(pFaceFSI, pThreadFSI)
-//     {
-//         F_AREA(AreaVector, pFaceFSI, pThreadFSI);
-//         Press = F_P(pFaceFSI, pThreadFSI);
-//         nNodePerFace = F_NNODES(pFaceFSI, pThreadFSI);
-//         f_node_loop(pFaceFSI, pThreadFSI, iNode)
-//         {
-//             pNode = F_NODE(pFaceFSI, pThreadFSI, iNode);
-//             for (int i = 0; i < nMode; i++)
-//             {
-//                 modeForce[i] += 1 / nNodePerFace;
-//             }          
-//         }
-//     }
-//     end_f_loop(pFaceFSI, pThreadFSI);
-// }
+/**
+ * @brief get mode force object
+ * 
+ * @param modeForce modal force at this time
+ * @param pDomain pointer of domain
+ * @return int 
+ */
+int get_mode_force(real * const modeForce, Domain * const pDomain)
+{
+    Thread *pThread = Lookup_Thread(pDomain, idFSI);
+    face_t pFace;
+    Node *pNode;
+    real AreaVector[3] = {0}, Press = 0;
+    int nNodePerFace = 0, iNode = 0;
+    
+    begin_f_loop(pFace, pThread)
+    {
+        F_AREA(AreaVector, pFace, pThread);
+        Press = F_P(pFace, pThread);
+        nNodePerFace = F_NNODES(pFace, pThread);
+        f_node_loop(pFace, pThread, iNode)
+        {
+            pNode = F_NODE(pFace, pThread, iNode);
+            for (int i = 0; i < nMode; i++)
+                modeForce[i] += 1 / nNodePerFace * Press * (\
+                AreaVector[0] * N_UDMI(pNode, 3 * i + 0) + \
+                AreaVector[1] * N_UDMI(pNode, 3 * i + 1) + \
+                AreaVector[2] * N_UDMI(pNode, 3 * i + 2));
+        }
+    }
+    end_f_loop(pFace, pThread);
+
+    return 0;
+}
 
 #endif

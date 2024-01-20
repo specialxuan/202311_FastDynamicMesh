@@ -6,7 +6,7 @@
 #include "dpm.h"
 extern DEFINE_ON_DEMAND(ModeCalculation);
 extern DEFINE_ON_DEMAND(Preprocess);
-extern DEFINE_GRID_MOTION(FDM_method, domain, dt, time, dtime);
+extern DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dtime);
 extern DEFINE_EXECUTE_AT_END(setting_next_time_step);
  __declspec(dllexport) UDF_Data udf_data[] = {
 {"ModeCalculation", (void (*)(void))ModeCalculation, UDF_TYPE_ON_DEMAND},
