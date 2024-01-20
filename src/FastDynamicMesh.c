@@ -16,7 +16,7 @@
  * @brief calculate modal displacement
  *
  */
-DEFINE_ON_DEMAND(ModeCalculation)
+DEFINE_ON_DEMAND(Mode_calculation)
 {
 #if !RP_NODE                       // run on host process
     system("ModeCalculation.bat"); // execute apdl batch
@@ -101,8 +101,10 @@ DEFINE_ON_DEMAND(Preprocess)
  * @brief construct a new grid motion method
  *
  */
-DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dtime)
+DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
 {
+    const real *const modeDispLastTime = modeDisp + (iTime - 1) * nMode * 3;
+    const real *const modeForceLastTime = modeForce + (iTime - 1) * nMode;
     real *const modeDispThisTime = modeDisp + iTime * nMode * 3;                     // modal displacement this time, buffer
     real *const modeForceThisTime = modeForce + iTime * nMode, modeForceBuff[nMode]; // modal force this time, buffer
     memset(modeDispThisTime, 0, nMode * 3 * sizeof(real));                           // allocate memory
@@ -111,7 +113,7 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dtime)
 
 #if !RP_NODE
     Message("\nUDF: ***      Begin: This is Host      ***\n");
-
+    // calculate modal force on structure
     Message("UDF: ***      End:   This is Host      ***\n");
 #endif
 #if !RP_HOST
@@ -127,60 +129,38 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dtime)
 #if !RP_NODE
     Message("\nUDF: ***      Begin: This is Host      ***\n");
 
-    if (iTime == 0) // initiate wilson-theta method
-    {
-        for (int i = 0; i < nMode; i++)
-        {
-            modeDisp[i * 3 + 0] = modeForceThisTime[i];
-            modeDisp[i * 3 + 1] = initVelocity[i];
-            modeDisp[i * 3 + 1] = 0;
-        }
-    }
-    else
-    {
-        const real *const modeForceLastTime = modeForce + (iTime - 1) * nMode;
-        const real *const modeDispLastTime = modeDisp + (iTime - 1) * nMode * 3;
-        for (int i = 0; i < nMode; i++)
-        {
-            real dis = 0, vel = 0, acc = 0;
-            const real disLast = modeDispLastTime[3 * i + 0],
-                       velLast = modeDispLastTime[3 * i + 1],
-                       accLast = modeDispLastTime[3 * i + 2];
-
-            // calculate modal displacement, acceleration, velocity using wilson-theta method
-            dis = modeForceLastTime[i] + Theta * (modeForceThisTime[i] - modeForceLastTime[i]);
-            dis += Mass * (6 / SQR(Theta * dtime) * disLast + 6 / (Theta * dtime) * velLast + 2 * accLast);
-            dis += Damp * (3 / (Theta * dtime) * disLast + 2 * velLast + 0.5 * Theta * dtime * accLast);
-            dis /= 6 * Mass / SQR(Theta * dtime) + 3 * Damp / (Theta * dtime) + SQR(2 * M_PI * modeFreq[i]);
-            // calculate acceleration
-            acc = 6 / (SQR(Theta * dtime) * Theta) * (dis - disLast) - 6 / (SQR(Theta) * dtime) * velLast + (1 - 3 / Theta) * accLast;
-            // calculate velocity
-            vel = velLast + 0.5 * dtime * (acc + accLast);
-            // calculate displacement
-            dis = disLast + dtime * velLast + SQR(dtime) / 6 * (acc + 2 * accLast);
-
-            modeDispThisTime[3 * i + 0] = dis;
-            modeDispThisTime[3 * i + 1] = vel;
-            modeDispThisTime[3 * i + 2] = acc;
-        }
-    }
+    wilson_theta(modeForceThisTime,modeForceLastTime, modeDispThisTime, modeDispLastTime, dTime);
 
     Message("UDF: ***      End:   This is Host      ***\n");
 #endif
 
     host_to_node_real(modeDispThisTime, 3 * nMode); // broadcast modal displacement to node process
-}
 
-DEFINE_EXECUTE_AT_END(setting_next_time_step)
-{
-#if !RP_NODE
-    Message("\nUDF: ***      Begin: This is Host      ***\n");
-
-    Message("UDF: ***      End:   This is Host      ***\n");
-#endif
-#if !RP_HOST
+#if !RP_HOST // run on node process
     Message("\nUDF: +++      Begin: This is Node      +++\n");
+
+    move_grid(modeDispThisTime, modeDispLastTime, pDomain);
 
     Message("UDF: +++      End:   This is Node      +++\n");
 #endif
+
+    iIter++;
+}
+
+/**
+ * @brief set next time step
+ * 
+ */
+DEFINE_EXECUTE_AT_END(Set_next_time_step)
+{
+#if !RP_NODE
+    Message("UDF[Host]: time step is %d, time is %f, modal forces are ", iTime, TimeSeq[iTime]);
+    for (int i = 0; i < nMode; i++)
+        Message("%12.10e ", modeForce[iTime * nMode + i]);
+#endif
+
+    PRF_GSYNC();
+    iIter = 1;
+    iTime++;
+    TimeSeq[iTime] = CURRENT_TIME;
 }

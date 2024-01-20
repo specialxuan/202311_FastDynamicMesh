@@ -24,10 +24,6 @@ static real *modeForce = NULL;    // modal force
 static real *modeDisp = NULL;     // modal-displacement,modal-velocity,acceleration repeat
 static real *initVelocity = NULL; // initial modal velocity
 
-static const real Mass = 1;    // modal mass = 1, which means normalization of principal mass
-static const real Damp = 0;    // modal damping
-static const real Theta = 1.4; // wilson-theta method, the value of the theta
-
 static int idFSI = 19;   // record the id of the fsi faces, shown in fluent       // TODO: read from file
 static int idFluid = 11; // record the id of the fluid cell zone, shown in fluent // TODO: read from file
 
@@ -38,7 +34,7 @@ static int idFluid = 11; // record the id of the fluid cell zone, shown in fluen
  * @param b pointer of second node
  * @return int
  */
-int cmp_node(const void * const a, const void * const b)
+int cmp_node(const void *const a, const void *const b)
 {
     const double *da = (double *)a, *db = (double *)b;
     int xCmp = *(da + 0) - *(db + 0) < -NODE_MATCH_TOLERANCE ? -1 : *(da + 0) - *(db + 0) > NODE_MATCH_TOLERANCE ? 1 : 0; // compare x
@@ -59,7 +55,7 @@ int cmp_node(const void * const a, const void * const b)
  * @param iMode which mode to input
  * @return int
  */
-int read_coor_mode(double * const nodeCoorDisp, real * const modeFreq, const int iMode)
+int read_coor_mode(double *const nodeCoorDisp, real *const modeFreq, const int iMode)
 {
     const int row = nNode, column = (nMode + 1) * 3;
     char inFileName[20] = {0}, line_buf[256] = {0}; // input file name, ignore first line
@@ -123,6 +119,65 @@ int read_row_column()
     return 0;
 }
 
+/**
+ * @brief wilson theta method
+ * 
+ * @param modeForceThisTime modal force at this time
+ * @param modeForceLastTime modal force at last time
+ * @param modeDispThisTime modal displacement at this time
+ * @param modeDispLastTime modal displacement at last time
+ * @param dTime time gap
+ * @return int 
+ */
+int wilson_theta(const real *const modeForceThisTime,
+                 const real *const modeForceLastTime,
+                 real *const modeDispThisTime,
+                 const real *const modeDispLastTime,
+                 const real dTime)
+{
+    static const real Mass = 1;    // modal mass = 1, which means normalization of principal mass
+    static const real Damp = 0;    // modal damping
+    static const real Theta = 1.4; // wilson-theta method, the value of the theta
+
+    if (iTime == 0) // initiate wilson-theta method
+    {
+        for (int i = 0; i < nMode; i++)
+        {
+            modeDisp[i * 3 + 0] = 0;
+            modeDisp[i * 3 + 1] = initVelocity[i];
+            modeDisp[i * 3 + 2] = modeForceThisTime[i];
+        }
+    }
+    else
+    {
+        for (int i = 0; i < nMode; i++)
+        {
+            real dis = 0, vel = 0, acc = 0;
+            const real disLast = modeDispLastTime[3 * i + 0],
+                       velLast = modeDispLastTime[3 * i + 1],
+                       accLast = modeDispLastTime[3 * i + 2];
+
+            // calculate modal displacement, acceleration, velocity using wilson-theta method
+            dis = modeForceLastTime[i] + Theta * (modeForceThisTime[i] - modeForceLastTime[i]);
+            dis += Mass * (6 / SQR(Theta * dTime) * disLast + 6 / (Theta * dTime) * velLast + 2 * accLast);
+            dis += Damp * (3 / (Theta * dTime) * disLast + 2 * velLast + 0.5 * Theta * dTime * accLast);
+            dis /= 6 * Mass / SQR(Theta * dTime) + 3 * Damp / (Theta * dTime) + SQR(2 * M_PI * modeFreq[i]);
+            // calculate acceleration
+            acc = 6 / (SQR(Theta * dTime) * Theta) * (dis - disLast) - 6 / (SQR(Theta) * dTime) * velLast + (1 - 3 / Theta) * accLast;
+            // calculate velocity
+            vel = velLast + 0.5 * dTime * (acc + accLast);
+            // calculate displacement
+            dis = disLast + dTime * velLast + SQR(dTime) / 6 * (acc + 2 * accLast);
+
+            modeDispThisTime[3 * i + 0] = dis;
+            modeDispThisTime[3 * i + 1] = vel;
+            modeDispThisTime[3 * i + 2] = acc;
+        }
+    }
+
+    return 0;
+}
+
 #endif
 
 #if !RP_HOST
@@ -134,7 +189,7 @@ int read_row_column()
  * @param column column of nodeCoorDisp
  * @return int 
  */
-int fill_modal_disp(const double * const nodeCoorDisp)
+int fill_modal_disp(const double *const nodeCoorDisp)
 {
     Domain *pDomain; // pointer of domain
     cell_t pCell;    // pointer of cell
@@ -207,14 +262,14 @@ int fill_modal_disp(const double * const nodeCoorDisp)
  * @param pDomain pointer of domain
  * @return int 
  */
-int get_mode_force(real * const modeForce, Domain * const pDomain)
+int get_mode_force(real *const modeForce, Domain *const pDomain)
 {
     Thread *pThread = Lookup_Thread(pDomain, idFSI);
     face_t pFace;
     Node *pNode;
     real AreaVector[3] = {0}, Press = 0;
     int nNodePerFace = 0, iNode = 0;
-    
+
     begin_f_loop(pFace, pThread)
     {
         F_AREA(AreaVector, pFace, pThread);
@@ -224,13 +279,56 @@ int get_mode_force(real * const modeForce, Domain * const pDomain)
         {
             pNode = F_NODE(pFace, pThread, iNode);
             for (int i = 0; i < nMode; i++)
-                modeForce[i] += 1 / nNodePerFace * Press * (\
-                AreaVector[0] * N_UDMI(pNode, 3 * i + 0) + \
-                AreaVector[1] * N_UDMI(pNode, 3 * i + 1) + \
+                modeForce[i] += 1 / nNodePerFace * Press * (
+                AreaVector[0] * N_UDMI(pNode, 3 * i + 0) + 
+                AreaVector[1] * N_UDMI(pNode, 3 * i + 1) + 
                 AreaVector[2] * N_UDMI(pNode, 3 * i + 2));
         }
     }
     end_f_loop(pFace, pThread);
+
+    return 0;
+}
+
+/**
+ * @brief move grid
+ * 
+ * @param modeDispThisTime modal displacement at this time
+ * @param modeDispLastTime modal displacement at last time
+ * @param pDomain 
+ * @return int 
+ */
+int move_grid(const real *const modeDispThisTime,
+              const real *const modeDispLastTime,
+              Domain *const pDomain)
+{
+    Thread *pThread = Lookup_Thread(pDomain, idFluid);
+    cell_t pCell;
+    Node *pNode;
+    real dispUpdate[3] = {0}, deltaDisp = 0;
+    int iNode = 0;
+    
+    begin_c_loop_int_ext(pCell, pThread)
+    {
+        c_node_loop(pCell, pThread, iNode)
+        {
+            pNode = C_NODE(pCell, pThread, iNode);
+            if (NODE_POS_NEED_UPDATE(pNode))
+            {
+                memset(dispUpdate, 0, 3 * sizeof(real));
+                for (int i = 0; i < nMode; i++)
+                {
+                    deltaDisp = modeDispThisTime[3 * i] - modeDispLastTime[3 * i];
+                    dispUpdate[0] = deltaDisp * N_UDMI(pNode, 3 * i + 0);
+                    dispUpdate[1] = deltaDisp * N_UDMI(pNode, 3 * i + 1);
+                    dispUpdate[2] = deltaDisp * N_UDMI(pNode, 3 * i + 2);
+                }
+                NV_V(NODE_COORD(pNode), +=, dispUpdate);
+                NODE_POS_UPDATED(pNode);
+            }
+        }
+    }
+    end_c_loop_int_ext(pCell, pThread)
 
     return 0;
 }
