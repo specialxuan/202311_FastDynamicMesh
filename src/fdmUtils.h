@@ -1,12 +1,12 @@
 /**
  * @file fdmUtils.h
  * @author Special (special.xuan@outlook.com)
- * @brief 
+ * @brief
  * @version 0.1
  * @date 2023-12-30
- * 
+ *
  * @copyright Copyright (c) 2023
- * 
+ *
  */
 
 #include <math.h>
@@ -50,7 +50,6 @@ int cmp_node(const void *const a, const void *const b)
     return xCmp ? xCmp : yCmp ? yCmp : zCmp ? zCmp : 0; // if x, then y, then z, then equal
 }
 
-
 #if !RP_NODE
 /**
  * @brief HOST_ONLY input node coordinates and modal displacement
@@ -80,7 +79,7 @@ int read_coor_mode(double *const nodeCoorDisp, real *const modeFreq, const int i
 
     if (iMode > 0)
         fscanf(fpInput, "%lf,", modeFreq + iMode - 1); // read mode frequency
-    
+
     fgets(line_buf, 256, fpInput); // ignore first line
     for (int i = 0; i < row; i++)  // fill the array of node coordinates and modal displacements
         if (fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * N_DOF_PER_NODE + 0) <= 0 ||
@@ -104,7 +103,7 @@ int read_coor_mode(double *const nodeCoorDisp, real *const modeFreq, const int i
  */
 int read_nodes_modes()
 {
-    double nNodeFromFile = 0, nModeFromFile = 0;                     // number of nodes, number of modes
+    double nNodeFromFile = 0, nModeFromFile = 0;     // number of nodes, number of modes
     FILE *fpInput = fopen("mode/NodeCoor.csv", "r"); // open the file in the read-only mode
     if (fpInput == NULL)                             // file not exists, print error
     {
@@ -119,7 +118,7 @@ int read_nodes_modes()
         fclose(fpInput);
         return 2;
     }
-    nNode = (int)nNodeFromFile;              // rows of node coordinates and modal displacement
+    nNode = (int)nNodeFromFile; // rows of node coordinates and modal displacement
     nMode = (int)nModeFromFile; // columns of node coordinates and modal displacement
     fclose(fpInput);
 
@@ -128,13 +127,13 @@ int read_nodes_modes()
 
 /**
  * @brief wilson theta method
- * 
+ *
  * @param modeForceThisTime modal force at this time
  * @param modeForceLastTime modal force at last time
  * @param modeDispThisTime modal displacement at this time
  * @param modeDispLastTime modal displacement at last time
  * @param dTime time gap
- * @return int 
+ * @return int
  */
 int wilson_theta(const real *const modeForceThisTime,
                  const real *const modeForceLastTime,
@@ -160,9 +159,9 @@ int wilson_theta(const real *const modeForceThisTime,
         for (int i = 0; i < nMode; i++)
         {
             real dis = 0, vel = 0, acc = 0;
-            const real disLast = modeDispLastTime[i * N_DOF_PER_NODE  + 0],
-                       velLast = modeDispLastTime[i * N_DOF_PER_NODE  + 1],
-                       accLast = modeDispLastTime[i * N_DOF_PER_NODE  + 2];
+            const real disLast = modeDispLastTime[i * N_DOF_PER_NODE + 0],
+                       velLast = modeDispLastTime[i * N_DOF_PER_NODE + 1],
+                       accLast = modeDispLastTime[i * N_DOF_PER_NODE + 2];
 
             // calculate modal displacement, acceleration, velocity using wilson-theta method
             dis = modeForceLastTime[i] + Theta * (modeForceThisTime[i] - modeForceLastTime[i]);
@@ -190,11 +189,11 @@ int wilson_theta(const real *const modeForceThisTime,
 #if !RP_HOST
 /**
  * @brief NODE_ONLY fill node coordinate and modal displacement into UDMI
- * 
+ *
  * @param nodeCoorDisp node coordinate and modal displacement
  * @param row row of nodeCoorDisp
  * @param column column of nodeCoorDisp
- * @return int 
+ * @return int
  */
 int fill_modal_disp(const double *const nodeCoorDisp)
 {
@@ -243,7 +242,6 @@ int fill_modal_disp(const double *const nodeCoorDisp)
                         for (int i = 0; i < UDMIColumn; i++) // fill UDMI with modal displacement
                         {
                             N_UDMI(pNode, i) = thisNode[i + N_DOF_PER_NODE];
-                            // fprintf(fpOutput, " %10.5e,", N_UDMI(pNode, i)); // output UDMI to file
                         }
                     else
                         fprintf(fpOutput, "Error: no node at (%f, %f, %f)", node_coor[0], node_coor[1], node_coor[2]); // if this node not found, output error in file
@@ -264,10 +262,10 @@ int fill_modal_disp(const double *const nodeCoorDisp)
 
 /**
  * @brief get mode force object
- * 
+ *
  * @param modeForce modal force at this time
  * @param pDomain pointer of domain
- * @return int 
+ * @return int
  */
 int get_mode_force(real *const modeForce, Domain *const pDomain)
 {
@@ -299,11 +297,11 @@ int get_mode_force(real *const modeForce, Domain *const pDomain)
 
 /**
  * @brief move grid
- * 
+ *
  * @param modeDispThisTime modal displacement at this time
  * @param modeDispLastTime modal displacement at last time
- * @param pDomain 
- * @return int 
+ * @param pDomain
+ * @return int
  */
 int move_grid(const real *const modeDispThisTime,
               const real *const modeDispLastTime,
@@ -314,7 +312,7 @@ int move_grid(const real *const modeDispThisTime,
     Node *pNode;
     real dispUpdate[N_DOF_PER_NODE] = {0}, deltaDisp = 0;
     int iNode = 0;
-    
+
     begin_c_loop_int_ext(pCell, pThread)
     {
         c_node_loop(pCell, pThread, iNode)
