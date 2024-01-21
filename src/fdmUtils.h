@@ -13,6 +13,13 @@
 #include "udf.h" // note: move udf.h to the last
 #define NODE_MATCH_TOLERANCE 1e-6
 
+#if RP_3D
+#define N_DOF_PER_NODE 3
+#endif
+#if RP_2D
+#define N_DOF_PER_NODE 2
+#endif
+
 static int iIter = 1; // record the number of the iteration steps
 static int iTime = 0; // record the number of the time steps
 
@@ -57,7 +64,7 @@ int cmp_node(const void *const a, const void *const b)
  */
 int read_coor_mode(double *const nodeCoorDisp, real *const modeFreq, const int iMode)
 {
-    const int row = nNode, column = (nMode + 1) * 3;
+    const int row = nNode, column = (nMode + 1) * N_DOF_PER_NODE;
     char inFileName[20] = {0}, line_buf[256] = {0}; // input file name, ignore first line
     if (iMode == 0)
         sprintf(inFileName, "mode/NodeCoor.csv"); // read coordinate at first time
@@ -76,9 +83,9 @@ int read_coor_mode(double *const nodeCoorDisp, real *const modeFreq, const int i
     
     fgets(line_buf, 256, fpInput); // ignore first line
     for (int i = 0; i < row; i++)  // fill the array of node coordinates and modal displacements
-        if (fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * 3 + 0) <= 0 ||
-            fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * 3 + 1) <= 0 ||
-            fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * 3 + 2) <= 0) // data missing, print error
+        if (fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * N_DOF_PER_NODE + 0) <= 0 ||
+            fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * N_DOF_PER_NODE + 1) <= 0 ||
+            fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * N_DOF_PER_NODE + 2) <= 0) // data missing, print error
         {
             Message("UDF[Host]: Error: Lack of variables in Mode %d, Node %d.\n", iMode, i);
             fclose(fpInput);
@@ -95,7 +102,7 @@ int read_coor_mode(double *const nodeCoorDisp, real *const modeFreq, const int i
  *
  * @return int
  */
-int read_row_column()
+int read_nodes_modes()
 {
     double nNodeFromFile = 0, nModeFromFile = 0;                     // number of nodes, number of modes
     FILE *fpInput = fopen("mode/NodeCoor.csv", "r"); // open the file in the read-only mode
@@ -143,9 +150,9 @@ int wilson_theta(const real *const modeForceThisTime,
     {
         for (int i = 0; i < nMode; i++)
         {
-            modeDisp[i * 3 + 0] = 0;
-            modeDisp[i * 3 + 1] = initVelocity[i];
-            modeDisp[i * 3 + 2] = modeForceThisTime[i];
+            modeDisp[i * N_DOF_PER_NODE + 0] = 0;
+            modeDisp[i * N_DOF_PER_NODE + 1] = initVelocity[i];
+            modeDisp[i * N_DOF_PER_NODE + 2] = modeForceThisTime[i];
         }
     }
     else
@@ -153,9 +160,9 @@ int wilson_theta(const real *const modeForceThisTime,
         for (int i = 0; i < nMode; i++)
         {
             real dis = 0, vel = 0, acc = 0;
-            const real disLast = modeDispLastTime[3 * i + 0],
-                       velLast = modeDispLastTime[3 * i + 1],
-                       accLast = modeDispLastTime[3 * i + 2];
+            const real disLast = modeDispLastTime[i * N_DOF_PER_NODE  + 0],
+                       velLast = modeDispLastTime[i * N_DOF_PER_NODE  + 1],
+                       accLast = modeDispLastTime[i * N_DOF_PER_NODE  + 2];
 
             // calculate modal displacement, acceleration, velocity using wilson-theta method
             dis = modeForceLastTime[i] + Theta * (modeForceThisTime[i] - modeForceLastTime[i]);
@@ -169,9 +176,9 @@ int wilson_theta(const real *const modeForceThisTime,
             // calculate displacement
             dis = disLast + dTime * velLast + SQR(dTime) / 6 * (acc + 2 * accLast);
 
-            modeDispThisTime[3 * i + 0] = dis;
-            modeDispThisTime[3 * i + 1] = vel;
-            modeDispThisTime[3 * i + 2] = acc;
+            modeDispThisTime[i * N_DOF_PER_NODE + 0] = dis;
+            modeDispThisTime[i * N_DOF_PER_NODE + 1] = vel;
+            modeDispThisTime[i * N_DOF_PER_NODE + 2] = acc;
         }
     }
 
@@ -196,9 +203,9 @@ int fill_modal_disp(const double *const nodeCoorDisp)
     Thread *pThread; // pointer of thread
     Node *pNode;     // pointer of node
 
-    const int row = nNode, column = (nMode + 1) * 3;
-    int iNode = 0, nodeCount = 0, UDMIColumn = column - 3; // node index, total number of node, columns of UDMI
-    double node_coor[3] = {0}, *thisNode = NULL;           // buffer of node coordinate, pointer of this node
+    const int row = nNode, column = (nMode + 1) * N_DOF_PER_NODE;
+    int iNode = 0, nodeCount = 0, UDMIColumn = column - N_DOF_PER_NODE; // node index, total number of node, columns of UDMI
+    double node_coor[N_DOF_PER_NODE] = {0}, *thisNode = NULL;           // buffer of node coordinate, pointer of this node
 
     char outFileName[20] = {0};                     // output file name
     sprintf(outFileName, "outputNode%d.csv", myid); // output file name of each node process
@@ -235,7 +242,7 @@ int fill_modal_disp(const double *const nodeCoorDisp)
                     if (thisNode != NULL)                    // if this node found
                         for (int i = 0; i < UDMIColumn; i++) // fill UDMI with modal displacement
                         {
-                            N_UDMI(pNode, i) = thisNode[i + 3];
+                            N_UDMI(pNode, i) = thisNode[i + N_DOF_PER_NODE];
                             // fprintf(fpOutput, " %10.5e,", N_UDMI(pNode, i)); // output UDMI to file
                         }
                     else
@@ -267,7 +274,7 @@ int get_mode_force(real *const modeForce, Domain *const pDomain)
     Thread *pThread = Lookup_Thread(pDomain, idFSI);
     face_t pFace;
     Node *pNode;
-    real AreaVector[3] = {0}, Press = 0;
+    real AreaVector[N_DOF_PER_NODE] = {0}, Press = 0;
     int nNodePerFace = 0, iNode = 0;
 
     begin_f_loop(pFace, pThread)
@@ -280,9 +287,9 @@ int get_mode_force(real *const modeForce, Domain *const pDomain)
             pNode = F_NODE(pFace, pThread, iNode);
             for (int i = 0; i < nMode; i++)
                 modeForce[i] += 1 / nNodePerFace * Press * (
-                AreaVector[0] * N_UDMI(pNode, 3 * i + 0) + 
-                AreaVector[1] * N_UDMI(pNode, 3 * i + 1) + 
-                AreaVector[2] * N_UDMI(pNode, 3 * i + 2));
+                AreaVector[0] * N_UDMI(pNode, i * N_DOF_PER_NODE + 0) + 
+                AreaVector[1] * N_UDMI(pNode, i * N_DOF_PER_NODE + 1) + 
+                AreaVector[2] * N_UDMI(pNode, i * N_DOF_PER_NODE + 2));
         }
     }
     end_f_loop(pFace, pThread);
@@ -305,7 +312,7 @@ int move_grid(const real *const modeDispThisTime,
     Thread *pThread = Lookup_Thread(pDomain, idFluid);
     cell_t pCell;
     Node *pNode;
-    real dispUpdate[3] = {0}, deltaDisp = 0;
+    real dispUpdate[N_DOF_PER_NODE] = {0}, deltaDisp = 0;
     int iNode = 0;
     
     begin_c_loop_int_ext(pCell, pThread)
@@ -315,13 +322,13 @@ int move_grid(const real *const modeDispThisTime,
             pNode = C_NODE(pCell, pThread, iNode);
             if (NODE_POS_NEED_UPDATE(pNode))
             {
-                memset(dispUpdate, 0, 3 * sizeof(real));
+                memset(dispUpdate, 0, N_DOF_PER_NODE * sizeof(real));
                 for (int i = 0; i < nMode; i++)
                 {
-                    deltaDisp = modeDispThisTime[3 * i] - modeDispLastTime[3 * i];
-                    dispUpdate[0] = deltaDisp * N_UDMI(pNode, 3 * i + 0);
-                    dispUpdate[1] = deltaDisp * N_UDMI(pNode, 3 * i + 1);
-                    dispUpdate[2] = deltaDisp * N_UDMI(pNode, 3 * i + 2);
+                    deltaDisp = modeDispThisTime[N_DOF_PER_NODE * i] - modeDispLastTime[N_DOF_PER_NODE * i];
+                    dispUpdate[0] = deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 0);
+                    dispUpdate[1] = deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 1);
+                    dispUpdate[2] = deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 2);
                 }
                 NV_V(NODE_COORD(pNode), +=, dispUpdate);
                 NODE_POS_UPDATED(pNode);

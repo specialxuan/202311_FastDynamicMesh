@@ -20,7 +20,7 @@ DEFINE_ON_DEMAND(Mode_calculation)
 {
 #if !RP_NODE                       // run on host process
     system("ModeCalculation.bat"); // execute apdl batch
-    if (read_row_column() == 0)    // check if files generated
+    if (read_nodes_modes() == 0)    // check if files generated
         Message("UDF[Host]: Files Generated\n");
 #endif
 }
@@ -42,9 +42,9 @@ DEFINE_ON_DEMAND(Preprocess)
     RP_Set_Float("flow-time", 0); // set  flow time
 
 #if !RP_NODE                                 // run in host process
-    if (fileStatus = read_row_column() == 0) // input size of node coordinates and modal displacement
+    if (fileStatus = read_nodes_modes() == 0) // input size of node coordinates and modal displacement
     {
-        row = nNode, column = (nMode + 1) * 3;                              // number of modes
+        row = nNode, column = (nMode + 1) * N_DOF_PER_NODE;                              // number of modes
         Message("UDF[Host]: r = %d, c = %d, m = %d\n", row, column, nMode); // print size of node coordinates and modal displacement and number of modes
 
         nodeCoorDisp = (double *)malloc(row * column * sizeof(double)); // allocate memory for nodeCoorDisp
@@ -89,8 +89,8 @@ DEFINE_ON_DEMAND(Preprocess)
     memset(TimeSeq, 0, 100000 * sizeof(real));
     modeForce = (real *)malloc(100000 * nMode * sizeof(real));
     memset(modeForce, 0, 100000 * nMode * sizeof(real));
-    modeDisp = (real *)malloc(100000 * 3 * nMode * sizeof(real));
-    memset(modeDisp, 0, 100000 * 3 * nMode * sizeof(real));
+    modeDisp = (real *)malloc(100000 * N_DOF_PER_NODE * nMode * sizeof(real));
+    memset(modeDisp, 0, 100000 * N_DOF_PER_NODE * nMode * sizeof(real));
     initVelocity = (real *)malloc(4 * sizeof(real));
     memset(initVelocity, 0, 4 * sizeof(real));
 
@@ -103,11 +103,11 @@ DEFINE_ON_DEMAND(Preprocess)
  */
 DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
 {
-    const real *const modeDispLastTime = modeDisp + (iTime - 1) * nMode * 3;
+    const real *const modeDispLastTime = modeDisp + (iTime - 1) * nMode * N_DOF_PER_NODE;
     const real *const modeForceLastTime = modeForce + (iTime - 1) * nMode;
-    real *const modeDispThisTime = modeDisp + iTime * nMode * 3;                     // modal displacement this time, buffer
+    real *const modeDispThisTime = modeDisp + iTime * nMode * N_DOF_PER_NODE;                     // modal displacement this time, buffer
     real *const modeForceThisTime = modeForce + iTime * nMode, modeForceBuff[nMode]; // modal force this time, buffer
-    memset(modeDispThisTime, 0, nMode * 3 * sizeof(real));                           // allocate memory
+    memset(modeDispThisTime, 0, nMode * N_DOF_PER_NODE * sizeof(real));                           // allocate memory
     memset(modeForceThisTime, 0, nMode * sizeof(real));
     memset(modeForceBuff, 0, nMode * sizeof(real));
 
@@ -129,12 +129,12 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
 #if !RP_NODE
     Message("\nUDF: ***      Begin: This is Host      ***\n");
 
-    wilson_theta(modeForceThisTime,modeForceLastTime, modeDispThisTime, modeDispLastTime, dTime);
+    wilson_theta(modeForceThisTime, modeForceLastTime, modeDispThisTime, modeDispLastTime, dTime);
 
     Message("UDF: ***      End:   This is Host      ***\n");
 #endif
 
-    host_to_node_real(modeDispThisTime, 3 * nMode); // broadcast modal displacement to node process
+    host_to_node_real(modeDispThisTime, N_DOF_PER_NODE * nMode); // broadcast modal displacement to node process
 
 #if !RP_HOST // run on node process
     Message("\nUDF: +++      Begin: This is Node      +++\n");
@@ -149,7 +149,7 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
 
 /**
  * @brief set next time step
- * 
+ *
  */
 DEFINE_EXECUTE_AT_END(Set_next_time_step)
 {
@@ -163,4 +163,18 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
     iIter = 1;
     iTime++;
     TimeSeq[iTime] = CURRENT_TIME;
+}
+
+/**
+ * @brief clear memories at exit
+ * 
+ */
+DEFINE_EXECUTE_AT_EXIT(Finish_process)
+{
+    free(TimeSeq);
+    free(modeDisp);
+    free(modeFreq);
+    free(modeForce);
+    free(initVelocity);
+    Message0("UDF[Host]: All memories freed!\n");
 }
