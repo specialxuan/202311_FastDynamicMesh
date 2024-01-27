@@ -8,8 +8,12 @@ mode/Mode*
 *.log
 *.trn
 *.msh
-*.cas.h5
+*.h5
 *.tmp
+*.flprj
 outputNode*.csv
 cleanup*
 *.jou
+animation/*
+animation*
+data/*

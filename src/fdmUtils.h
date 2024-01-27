@@ -11,7 +11,7 @@
 
 #include <math.h>
 #include "udf.h" // note: move udf.h to the last
-#define NODE_MATCH_TOLERANCE 1e-6
+#define NODE_MATCH_TOLERANCE 4e-7
 
 #if RP_3D
 #define N_DOF_PER_NODE 3
@@ -31,8 +31,8 @@ static real *modeForce = NULL;    // modal force
 static real *modeDisp = NULL;     // modal-displacement,modal-velocity,acceleration repeat
 static real *initVelocity = NULL; // initial modal velocity
 
-static int idFSI = 19;   // record the id of the fsi faces, shown in fluent       // TODO: read from file
-static int idFluid = 11; // record the id of the fluid cell zone, shown in fluent // TODO: read from file
+static int idFSI = 23;   // record the id of the fsi faces, shown in fluent       // TODO: read from file
+static int idFluid = 14; // record the id of the fluid cell zone, shown in fluent // TODO: read from file
 
 /**
  * @brief compare nodes in order of x, y, z
@@ -52,7 +52,7 @@ int cmp_node(const void *const a, const void *const b)
 
 #if !RP_NODE
 /**
- * @brief HOST_ONLY input node coordinates and modal displacement
+ * @brief input node coordinates and modal displacement
  *
  * @param nodeCoorDisp node coordinates and modal displacements
  * @param modeFreq mode frequency
@@ -97,7 +97,7 @@ int read_coor_mode(double *const nodeCoorDisp, real *const modeFreq, const int i
 }
 
 /**
- * @brief HOST_ONLY input size of node coordinates and modal displacement
+ * @brief input size of node coordinates and modal displacement
  *
  * @return int
  */
@@ -129,33 +129,31 @@ int read_nodes_modes()
  * @brief wilson theta method
  *
  * @param modeForceThisTime modal force at this time
- * @param modeForceLastTime modal force at last time
  * @param modeDispThisTime modal displacement at this time
- * @param modeDispLastTime modal displacement at last time
  * @param dTime time gap
  * @return int
  */
 int wilson_theta(const real *const modeForceThisTime,
-                 const real *const modeForceLastTime,
                  real *const modeDispThisTime,
-                 const real *const modeDispLastTime,
                  const real dTime)
 {
     static const real Mass = 1;    // modal mass = 1, which means normalization of principal mass
     static const real Damp = 0;    // modal damping
     static const real Theta = 1.4; // wilson-theta method, the value of the theta
 
-    if (iTime == 0) // initiate wilson-theta method
+    if (iTime <= 1) // initiate wilson-theta method
     {
         for (int i = 0; i < nMode; i++)
         {
-            modeDisp[i * N_DOF_PER_NODE + 0] = 0;
-            modeDisp[i * N_DOF_PER_NODE + 1] = initVelocity[i];
-            modeDisp[i * N_DOF_PER_NODE + 2] = modeForceThisTime[i];
+            modeDispThisTime[i * N_DOF_PER_NODE + 0] = 0;
+            modeDispThisTime[i * N_DOF_PER_NODE + 1] = initVelocity[i];
+            modeDispThisTime[i * N_DOF_PER_NODE + 2] = modeForceThisTime[i];
         }
     }
     else
     {
+        const real *const modeDispLastTime = modeDisp + (iTime - 1) * nMode * N_DOF_PER_NODE;
+        const real *const modeForceLastTime = modeForce + (iTime - 1) * nMode;
         for (int i = 0; i < nMode; i++)
         {
             real dis = 0, vel = 0, acc = 0;
@@ -188,7 +186,7 @@ int wilson_theta(const real *const modeForceThisTime,
 
 #if !RP_HOST
 /**
- * @brief NODE_ONLY fill node coordinate and modal displacement into UDMI
+ * @brief fill node coordinate and modal displacement into UDMI
  *
  * @param nodeCoorDisp node coordinate and modal displacement
  * @param row row of nodeCoorDisp
@@ -242,9 +240,13 @@ int fill_modal_disp(const double *const nodeCoorDisp)
                         for (int i = 0; i < UDMIColumn; i++) // fill UDMI with modal displacement
                         {
                             N_UDMI(pNode, i) = thisNode[i + N_DOF_PER_NODE];
+                            fprintf(fpOutput, "%f,", N_UDMI(pNode, i)); // if this node not found, output error in file
                         }
                     else
+                    {
                         fprintf(fpOutput, "Error: no node at (%f, %f, %f)", node_coor[0], node_coor[1], node_coor[2]); // if this node not found, output error in file
+                        Message("UDF[Node]: Error: no node at (%f, %f, %f)\n", node_coor[0], node_coor[1], node_coor[2]);
+                    }
 
                     fprintf(fpOutput, "\n");
                     N_UDMI(pNode, UDMIColumn) = 1; // this node set
@@ -263,17 +265,18 @@ int fill_modal_disp(const double *const nodeCoorDisp)
 /**
  * @brief get mode force object
  *
- * @param modeForce modal force at this time
+ * @param modeForceThisTime modal force at this time
  * @param pDomain pointer of domain
  * @return int
  */
-int get_mode_force(real *const modeForce, Domain *const pDomain)
+int get_mode_force(real *const modeForceThisTime, Domain *const pDomain)
 {
     Thread *pThread = Lookup_Thread(pDomain, idFSI);
     face_t pFace;
     Node *pNode;
     real AreaVector[N_DOF_PER_NODE] = {0}, Press = 0;
     int nNodePerFace = 0, iNode = 0;
+    static int modeForceCount = 0;
 
     begin_f_loop(pFace, pThread)
     {
@@ -282,15 +285,34 @@ int get_mode_force(real *const modeForce, Domain *const pDomain)
         nNodePerFace = F_NNODES(pFace, pThread);
         f_node_loop(pFace, pThread, iNode)
         {
-            pNode = F_NODE(pFace, pThread, iNode);
-            for (int i = 0; i < nMode; i++)
-                modeForce[i] += 1 / nNodePerFace * Press * (
-                AreaVector[0] * N_UDMI(pNode, i * N_DOF_PER_NODE + 0) + 
-                AreaVector[1] * N_UDMI(pNode, i * N_DOF_PER_NODE + 1) + 
-                AreaVector[2] * N_UDMI(pNode, i * N_DOF_PER_NODE + 2));
+            if (PRINCIPAL_FACE_P(pFace, pThread))
+            {
+                pNode = F_NODE(pFace, pThread, iNode);
+                // if(myid == 0 && modeForceCount > 49 && modeForceCount % 50 == 0)
+                //     Message("UDF[Node]: Modal Force: ");
+                for (int i = 0; i < nMode; i++)
+                {
+                    modeForceThisTime[i] += 1 / (double)nNodePerFace * Press * (
+                                            AreaVector[0] * N_UDMI(pNode, i * N_DOF_PER_NODE + 0) + 
+                                            AreaVector[1] * N_UDMI(pNode, i * N_DOF_PER_NODE + 1) + 
+                                            AreaVector[2] * N_UDMI(pNode, i * N_DOF_PER_NODE + 2));
+                    // if (myid == 0 && modeForceCount > 49 && modeForceCount % 50 == 0)
+                    //     Message("%5.1e, ", modeForceThisTime[i]);
+                }
+                // if(myid == 0 && modeForceCount > 49 && modeForceCount % 50 == 0)
+                //     Message("%5.1e, %5.1e, %5d",AreaVector[0], Press, nNodePerFace);
+                // if (myid == 0 && modeForceCount > 49 && modeForceCount % 50 == 0)
+                //     Message("\n");
+                modeForceCount++;
+            }
         }
     }
     end_f_loop(pFace, pThread);
+
+    // Message("UDF[Node][%d]: ", myid);
+    // for (int i = 0; i < nMode; i++)
+    //     Message("%5.1e, ", modeForceThisTime[i]);
+    // Message("\n");
 
     return 0;
 }
@@ -304,14 +326,21 @@ int get_mode_force(real *const modeForce, Domain *const pDomain)
  * @return int
  */
 int move_grid(const real *const modeDispThisTime,
-              const real *const modeDispLastTime,
               Domain *const pDomain)
 {
+    if (iTime <= 1)
+        return 0;
+    
     Thread *pThread = Lookup_Thread(pDomain, idFluid);
     cell_t pCell;
     Node *pNode;
     real dispUpdate[N_DOF_PER_NODE] = {0}, deltaDisp = 0;
     int iNode = 0;
+    const real *const modeDispLastTime = modeDisp + (iTime - 1) * nMode * N_DOF_PER_NODE;
+    // Message("\nUDF[Node][%d]: time step is %d, iteration is %d modal displacement are ", myid, iTime, iIter);
+    // for (int i = 0; i < 9; i++)
+    //     Message("%5.1e ", modeDispThisTime[i]);
+    // Message("\n");
 
     begin_c_loop_int_ext(pCell, pThread)
     {
@@ -324,12 +353,15 @@ int move_grid(const real *const modeDispThisTime,
                 for (int i = 0; i < nMode; i++)
                 {
                     deltaDisp = modeDispThisTime[N_DOF_PER_NODE * i] - modeDispLastTime[N_DOF_PER_NODE * i];
-                    dispUpdate[0] = deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 0);
-                    dispUpdate[1] = deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 1);
-                    dispUpdate[2] = deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 2);
+                    dispUpdate[0] += deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 0);
+                    dispUpdate[1] += deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 1);
+                    dispUpdate[2] += deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 2);
                 }
                 NV_V(NODE_COORD(pNode), +=, dispUpdate);
                 NODE_POS_UPDATED(pNode);
+                // real x = NODE_X(pNode), y = NODE_Y(pNode), z = NODE_Z(pNode);
+                // if (x >= 0.49 && x <= 0.51 && y >= 0.18 && y <=0.22 && z == 0)
+                //     Message("UDF[Node][%d]: %5.1e + %5.1e, %5.1e + %5.1e, %5.1e + %5.1e\n", myid, x, dispUpdate[0], y, dispUpdate[1], z, dispUpdate[2]);
             }
         }
     }

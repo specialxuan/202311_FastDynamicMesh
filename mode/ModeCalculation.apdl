@@ -1,9 +1,8 @@
 /CLEAR
-/INPUT,'system','in'
+/INPUT,'beam_and_fluid','in'
 
-CMSEL,S,fluiddomain
+CMSEL,S,FLUID
 ESLN
-
 *GET,total_ele,ELEM,0,COUNT
 *dim,volu_stiffness,,total_ele,3
 *do,i,1,total_ele,1
@@ -29,81 +28,64 @@ finish
 
 /prep7
 !第一个用s，后面要用a
-allsel
-cmsel,s,top,node
-cmsel,a,bottom_fluid,node
-cmsel,a,left,node
-cmsel,a,right,node
-cmsel,a,bottom_solid,node
+cmsel,s,fluid_wall_top,node
+cmsel,a,fluid_wall_bottom,node
+cmsel,a,fluid_wall_cylinder,node
+cmsel,a,fluid_velocity_inlet,node
+cmsel,a,fluid_pressure_outlet,node
+cmsel,a,beam_fixe_face,node
 d,all,all
 
-cmsel,s,side1,node
-cmsel,a,side2,node
-cmsel,a,front,node
-cmsel,a,back,node
+cmsel,s,beam_symmetry_0,node
+cmsel,a,beam_symmetry_1,node
+cmsel,a,fluid_symmetry_0,node
+cmsel,a,fluid_symmetry_1,node
 d,all,uz
 
-CMSEL,S,fsi_solid
-ESLN ! select element if the node is less
-CMSEL,S,fsi_fluid ! select node if node is more
+CMSEL,S,BEAM_FLUID_STRUCTURE_INTERFACE
+ESLN
+CMSEL,S,FLUID_FLUID_STRUCTURE_INTERFACE
 CEINTF,1.2,,,,,,0.05
-alls
+ALLSEL,,
 !把两个面约束住
 
+
 /prep7
-mp,dens,3,0
-mp,ex,3,2
-mp,prxy,3,0
-CMSEL,S,fluiddomain
+mp,dens,2,0
+mp,ex,2,0.1
+mp,prxy,2,0
+CMSEL,S,FLUID
 ESLN
-emodif,all,mat,3
+emodif,all,mat,2
 
 *do,k,1,total_ele,1
 	mat_num=volu_stiffness(k,1)
-	mp,dens,mat_num,0 ! make sure that no element number is 1, 2, or 3
-	mp,ex,mat_num,2*(volu_stiffness(k,3)**2.5)
+	mp,dens,mat_num,0
+	mp,ex,mat_num,0.1*(volu_stiffness(k,3)**2.5)
 	mp,prxy,mat_num,0
 	emodif,volu_stiffness(k,1),mat,mat_num
 *enddo
 finish
 
-FINISH 
 /SOL
 ANTYPE,2
 MODOPT,LANB,10
 EQSLV,SPAR  
-! MXPAND,10, , ,0 
-! LUMPM,0 
-! PSTRES,0
-MODOPT,LANB,10,0,0, ,OFF
+MXPAND,10, , ,0 
+LUMPM,0 
+PSTRES,0
+MODOPT,LANB,10,0.334,0, ,OFF
 
-alls
+ALLSEL,,
 !求解
 /STATUS,SOLU
 SOLVE   
-
-
-!后处理，提取各阶模态位移
-! FINISH  
-! /POST1  
-! SET,,, ,,, ,1  
-! PRNSOL,U,COMP   
-! SET,,, ,,, ,2   
-! PRNSOL,U,COMP   
-! SET,,, ,,, ,3  
-! PRNSOL,U,COMP
-! SET,,, ,,, ,4  
-! PRNSOL,U,COMP   
-! SET,,, ,,, ,5   
-! PRNSOL,U,COMP   
-! !把弹出来对话框里面的复制到excel就可以处理了
 
 /prep7
 *set, all, , ! clear all parameters
 
 /post1
-CMSEL,S,fluiddomain
-! ESLN
+CMSEL,S,fluid
 *GET,N_Node,node,0,count,,, ! get the number of nodes
 *get, N_Modes, active, 0, set, nset ! get the number of sets
 

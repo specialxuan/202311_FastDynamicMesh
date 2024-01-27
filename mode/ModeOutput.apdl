@@ -2,8 +2,7 @@
 *set, all, , ! clear all parameters
 
 /post1
-CMSEL,S,fluiddomain
-! ESLN
+CMSEL,S,fluid
 *GET,N_Node,node,0,count,,, ! get the number of nodes
 *get, N_Modes, active, 0, set, nset ! get the number of sets
 

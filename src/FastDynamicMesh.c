@@ -103,8 +103,6 @@ DEFINE_ON_DEMAND(Preprocess)
  */
 DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
 {
-    const real *const modeDispLastTime = modeDisp + (iTime - 1) * nMode * N_DOF_PER_NODE;
-    const real *const modeForceLastTime = modeForce + (iTime - 1) * nMode;
     real *const modeDispThisTime = modeDisp + iTime * nMode * N_DOF_PER_NODE;        // modal displacement this time, buffer
     real *const modeForceThisTime = modeForce + iTime * nMode, modeForceBuff[nMode]; // modal force this time, buffer
     memset(modeDispThisTime, 0, nMode * N_DOF_PER_NODE * sizeof(real));              // allocate memory
@@ -116,18 +114,31 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
 #endif
 #if !RP_HOST
     get_mode_force(modeForceThisTime, pDomain); // get modal force
+    // Message("UDF[Node][%d]: ", myid);
+    // for (int i = 0; i < nMode; i++)
+    //     Message("%5.1e, ", modeForceThisTime[i]);
+    // Message("\n");
 #endif
 
     PRF_GRSUM(modeForceThisTime, nMode, modeForceBuff); // global summation fo modal force this time
+    node_to_host_real(modeForceThisTime, nMode);
 
 #if !RP_NODE
-    wilson_theta(modeForceThisTime, modeForceLastTime, modeDispThisTime, modeDispLastTime, dTime);
+    // Message("UDF[Host]: time step is %d, iteration is %d modal forces are ",iTime, iIter);
+    // for (int i = 0; i < nMode; i++)
+    //     Message("%5.1e ", modeForceThisTime[i]);
+    // Message("\n");
+    wilson_theta(modeForceThisTime, modeDispThisTime, dTime);
+    // Message("UDF[Host]: time step is %d, iteration is %d modal displacement are ",iTime, iIter);
+    // for (int i = 0; i < 9; i++)
+    //     Message("%5.1e ", modeDispThisTime[i]);
+    // Message("\n");
 #endif
 
     host_to_node_real(modeDispThisTime, N_DOF_PER_NODE * nMode); // broadcast modal displacement to node process
 
 #if !RP_HOST // run on node process
-    move_grid(modeDispThisTime, modeDispLastTime, pDomain);
+    move_grid(modeDispThisTime, pDomain);
 #endif
 
     iIter++;
@@ -142,7 +153,7 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
 #if !RP_NODE
     Message("UDF[Host]: time step is %d, time is %f, modal forces are ", iTime, TimeSeq[iTime]);
     for (int i = 0; i < nMode; i++)
-        Message("%12.10e ", modeForce[iTime * nMode + i]);
+        Message("%5.4e ", modeForce[iTime * nMode + i]);
     Message("\n");
 #endif
 
@@ -164,4 +175,24 @@ DEFINE_EXECUTE_AT_EXIT(Finish_process)
     free(modeForce);
     free(initVelocity);
     Message0("UDF[Host]: All memories freed!\n");
+}
+
+/**
+ * @brief velocity inlet boundary condition
+ * 
+ */
+DEFINE_PROFILE(Velocity_inlet, thread, variable_index)
+{
+    real U = 0.9;
+    real x[3];
+    real y;
+    face_t f;
+    begin_f_loop(f, thread)
+    {
+        F_CENTROID(x, f, thread);
+        y = x[1];
+        /* x[1] means the Y location, the X location was write as x[0] */
+        F_PROFILE(f, thread, variable_index) = 1.5 * U * 4 / 0.1681 * y * (0.41 - y);
+    }
+    end_f_loop(f, thread)
 }
