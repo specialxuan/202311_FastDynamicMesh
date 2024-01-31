@@ -10,7 +10,7 @@
  */
 
 #include "fdmUtils.h"
-#include "udf.h"
+#include <udf.h>
 
 /**
  * @brief calculate modal displacement
@@ -18,10 +18,12 @@
  */
 DEFINE_ON_DEMAND(Mode_calculation)
 {
-#if !RP_NODE                       // run on host process
-    system("ModeCalculation.bat"); // execute apdl batch
-    if (read_nodes_modes() == 0)   // check if files generated
-        Message("UDF[Host]: Files Generated\n");
+#if !RP_NODE                               // run on host process
+    system("ModeCalculation.bat");         // execute apdl batch
+    if (read_nodes_modes(fieldFluid) == 0) // check if files generated
+        Message("UDF[Host]: Fluid Files Generated\n");
+    if (read_nodes_modes(fieldStruct) == 0) // check if files generated
+        Message("UDF[Host]: Structure Files Generated\n");
 #endif
 }
 
@@ -31,9 +33,6 @@ DEFINE_ON_DEMAND(Mode_calculation)
  */
 DEFINE_ON_DEMAND(Preprocess)
 {
-    int row = 0, column = 0, fileStatus = 0; // size of node coordinates and modal displacements, number of modes, status of input file(0 is noError, 1 is Missing files, 2 is Missing data
-    double *nodeCoorDisp = NULL;             // node coordinates and modal displacements
-
     iIter = 1; // initialise iteration index
     iTime = 0; // initialise time index
 
@@ -41,33 +40,35 @@ DEFINE_ON_DEMAND(Preprocess)
     // RP_Set_Float(char *s, double v)-RP_Set_Float("flow-time", 0.2)
     RP_Set_Float("flow-time", 0); // set  flow time
 
-#if !RP_NODE                                  // run in host process
-    if (fileStatus = read_nodes_modes() == 0) // input size of node coordinates and modal displacement
+    int row = 0, column = 0, fileStatus = 0;            // size of node coordinates and modal displacements, number of modes, status of input file(0 is noError, 1 is Missing files, 2 is Missing data
+    double *nodeCoorDisp = NULL;                        // node coordinates and modal displacements
+#if !RP_NODE                                            // run in host process
+    if (fileStatus = read_nodes_modes(fieldFluid) == 0) // input size of node coordinates and modal displacement
     {
-        row = nNode, column = (nMode + 1) * N_DOF_PER_NODE;                 // number of modes
-        Message("UDF[Host]: r = %d, c = %d, m = %d\n", row, column, nMode); // print size of node coordinates and modal displacement and number of modes
+        row = nNode, column = (nMode + 1) * N_DOF_PER_NODE;                        // number of modes
+        Message("UDF[Host]: Fluid: r = %d, c = %d, m = %d\n", row, column, nMode); // print size of node coordinates and modal displacement and number of modes
 
         nodeCoorDisp = (double *)malloc(row * column * sizeof(double)); // allocate memory for nodeCoorDisp
         memset(nodeCoorDisp, 0, row * column * sizeof(double));         // initialize nodeCoorDisp
         modeFreq = (real *)malloc(nMode * sizeof(real));                // allocate memory for mode frequency
         memset(modeFreq, 0, nMode * sizeof(real));                      // initialize frequency
 
-        for (int iMode = 0; iMode < nMode + 1; iMode++)                     // input each modal displacement
-            if (fileStatus = read_coor_mode(nodeCoorDisp, modeFreq, iMode)) // if file or data missing, print error
-                Message("UDF[Host]: Error: %d in %d\n", fileStatus, iMode);
+        for (int iMode = 0; iMode < nMode + 1; iMode++)                                 // input each modal displacement
+            if (fileStatus = read_coor_mode(fieldFluid, nodeCoorDisp, modeFreq, iMode)) // if file or data missing, print error
+                Message("UDF[Host]: Fluid: Error: %d in %d\n", fileStatus, iMode);
 
-        Message("UDF[Host]: Mode frequency\n"); // print mode frequency
+        Message("UDF[Host]: Fluid: Mode frequency\n"); // print mode frequency
         for (int i = 0; i < nMode; i++)
             Message("           %f\n", modeFreq[i]);
 
         qsort(nodeCoorDisp, row, column * sizeof(double), cmp_node); // sort by node coordinate
     }
     else
-        Message("UDF[Host]: Error: %d\n", fileStatus);
+        Message("UDF[Host]: Fluid: Error: %d\n", fileStatus);
 #endif
-
     host_to_node_int_1(fileStatus); // broadcast file status to all node process
-    if (fileStatus == 0)            // if no error
+
+    if (fileStatus == 0) // if no error
     {
         host_to_node_int_4(row, column, nNode, nMode);                  // broadcast size to all node process
 #if !RP_HOST                                                            // run in node process
@@ -76,14 +77,13 @@ DEFINE_ON_DEMAND(Preprocess)
         modeFreq = (real *)malloc(nMode * sizeof(real));                // allocate memory for mode frequency
         memset(modeFreq, 0, nMode * sizeof(real));                      // initialize frequency
 #endif
-
         host_to_node_double(nodeCoorDisp, row * column); // broadcast node coordinate and modal displacement to all node process
         host_to_node_double(modeFreq, nMode);            // broadcast mode frequency to node process
-
-#if !RP_HOST // run in node process
+#if !RP_HOST                                             // run in node process
         fill_modal_disp(nodeCoorDisp);
 #endif
     }
+    free(nodeCoorDisp);
 
     TimeSeq = (real *)malloc(100000 * sizeof(real));
     memset(TimeSeq, 0, 100000 * sizeof(real));
@@ -94,7 +94,22 @@ DEFINE_ON_DEMAND(Preprocess)
     initVelocity = (real *)malloc(4 * sizeof(real));
     memset(initVelocity, 0, 4 * sizeof(real));
 
-    free(nodeCoorDisp);
+#if !RP_NODE
+    if (fileStatus = read_nodes_modes(fieldStruct) == 0)
+    {
+        row = nNode, column = nMode * N_DOF_PER_NODE; // number of modes
+        Message("UDF[Host]: Structure: r = %d, c = %d, m = %d\n", row, column, nMode); // print size of node coordinates and modal displacement and number of modes
+
+        structModeDisp = (double *)malloc(row * column * sizeof(double));
+        memset(structModeDisp, 0, row * column * sizeof(double));
+
+        for (int iMode = 0; iMode < nMode; iMode++)                                 // input each modal displacement
+            if (fileStatus = read_coor_mode(fieldFluid, nodeCoorDisp, modeFreq, iMode + 1)) // if file or data missing, print error
+                Message("UDF[Host]: Structure: Error: %d in %d\n", fileStatus, iMode);
+    }
+    else
+        Message("UDF[Host]: Structure: Error: %d\n", fileStatus);
+#endif
 }
 
 /**
@@ -174,12 +189,28 @@ DEFINE_EXECUTE_AT_EXIT(Finish_process)
     free(modeFreq);
     free(modeForce);
     free(initVelocity);
-    Message0("UDF[Host]: All memories freed!\n");
+    free(structModeDisp);
+    Message0("UDF[Host]: All memories cleared!\n");
+}
+
+/**
+ * @brief clear memories at exit
+ *
+ */
+DEFINE_ON_DEMAND(Clear_memories)
+{
+    free(TimeSeq);
+    free(modeDisp);
+    free(modeFreq);
+    free(modeForce);
+    free(initVelocity);
+    free(structModeDisp);
+    Message0("UDF[Host]: All memories cleared!\n");
 }
 
 /**
  * @brief velocity inlet boundary condition
- * 
+ *
  */
 DEFINE_PROFILE(Velocity_inlet, thread, variable_index)
 {

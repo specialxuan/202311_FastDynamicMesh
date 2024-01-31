@@ -10,7 +10,7 @@
  */
 
 #include <math.h>
-#include "udf.h" // note: move udf.h to the last
+#include <udf.h> // note: move udf.h to the last
 #define NODE_MATCH_TOLERANCE 4e-7
 
 #if RP_3D
@@ -20,19 +20,23 @@
 #define N_DOF_PER_NODE 2
 #endif
 
+static const char fieldFluid[] = "Fluid";
+static const char fieldStruct[] = "Struct";
+
 static int iIter = 1; // record the number of the iteration steps
 static int iTime = 0; // record the number of the time steps
 
 static int nNode = 0;
 static int nMode = 0;
+static double *structModeDisp = NULL;
 static real *TimeSeq = NULL;      // time sequence
-static real *modeFreq = NULL;     // frequencies of the structure // TODO: read from file
+static real *modeFreq = NULL;     // frequencies of the structure
 static real *modeForce = NULL;    // modal force
 static real *modeDisp = NULL;     // modal-displacement,modal-velocity,acceleration repeat
 static real *initVelocity = NULL; // initial modal velocity
 
-static int idFSI = 23;   // record the id of the fsi faces, shown in fluent       // TODO: read from file
-static int idFluid = 14; // record the id of the fluid cell zone, shown in fluent // TODO: read from file
+static const int idFSI = 23;   // record the id of the fsi faces, shown in fluent
+static const int idFluid = 14; // record the id of the fluid cell zone, shown in fluent
 
 /**
  * @brief compare nodes in order of x, y, z
@@ -61,19 +65,19 @@ int cmp_node(const void *const a, const void *const b)
  * @param iMode which mode to input
  * @return int
  */
-int read_coor_mode(double *const nodeCoorDisp, real *const modeFreq, const int iMode)
+int read_coor_mode(const char *const fieldName, double *const nodeCoorDisp, real *const modeFreq, const int iMode)
 {
     const int row = nNode, column = (nMode + 1) * N_DOF_PER_NODE;
     char inFileName[20] = {0}, line_buf[256] = {0}; // input file name, ignore first line
     if (iMode == 0)
-        sprintf(inFileName, "mode/NodeCoor.csv"); // read coordinate at first time
+        sprintf(inFileName, "mode/%sNodeCoor.csv", fieldName); // read coordinate at first time
     else
-        sprintf(inFileName, "mode/NodeDisp%d.csv", iMode); // read modal displacement
+        sprintf(inFileName, "mode/%sNodeDisp%d.csv", fieldName, iMode); // read modal displacement
 
     FILE *fpInput = fopen(inFileName, "r"); // open the file in the read-only mode
     if (fpInput == NULL)                    // file not exists, print error
     {
-        Message("UDF[Host]: Error: No file.\n");
+        Message("UDF[Host]: Error: No files.\n");
         return 1;
     }
 
@@ -101,20 +105,22 @@ int read_coor_mode(double *const nodeCoorDisp, real *const modeFreq, const int i
  *
  * @return int
  */
-int read_nodes_modes()
+int read_nodes_modes(const char *const fieldName)
 {
     double nNodeFromFile = 0, nModeFromFile = 0;     // number of nodes, number of modes
-    FILE *fpInput = fopen("mode/NodeCoor.csv", "r"); // open the file in the read-only mode
+    char inFileName[20] = {0};
+    sprintf(inFileName, "mode/%sNodeCoor.csv", fieldName);
+    FILE *fpInput = fopen(inFileName, "r"); // open the file in the read-only mode
     if (fpInput == NULL)                             // file not exists, print error
     {
-        Message("UDF[Host]: Error: No file.\n");
+        Message("UDF[Host]: Error: No %s files.\n", fieldName);
         return 1;
     }
     if (fscanf(fpInput, "%lf,", &nNodeFromFile) <= 0 || // ignore first number
         fscanf(fpInput, "%lf,", &nNodeFromFile) <= 0 || // input number of nodes
         fscanf(fpInput, "%lf,", &nModeFromFile) <= 0)   // input number of modes
     {
-        Message("UDF[Host]: Error: Lack of variables.\n");
+        Message("UDF[Host]: Error: Lack of %s variables.\n", fieldName);
         fclose(fpInput);
         return 2;
     }
