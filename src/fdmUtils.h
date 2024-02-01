@@ -29,6 +29,8 @@ static int iTime = 0; // record the number of the time steps
 static int nNode = 0;
 static int nMode = 0;
 static double *structModeDisp = NULL;
+static double *structStiff = NULL;
+static double *structDamp = NULL;
 static real *TimeSeq = NULL;      // time sequence
 static real *modeFreq = NULL;     // frequencies of the structure
 static real *modeForce = NULL;    // modal force
@@ -77,7 +79,7 @@ int read_coor_mode(const char *const fieldName, double *const nodeCoorDisp, real
     FILE *fpInput = fopen(inFileName, "r"); // open the file in the read-only mode
     if (fpInput == NULL)                    // file not exists, print error
     {
-        Message("UDF[Host]: Error: No files.\n");
+        Message("UDF[Host]: Error: No %s files.\n", fieldName);
         return 1;
     }
 
@@ -97,6 +99,49 @@ int read_coor_mode(const char *const fieldName, double *const nodeCoorDisp, real
 
     fclose(fpInput);
 
+    return 0;
+}
+
+int read_stiff_damp()
+{
+    const int row = nNode, column = N_DOF_PER_NODE;
+    char line_buf[256] = {0}; // ignore first line
+    FILE *fpInput = fopen("mode/StructStiff.csv", "r"); // open the file in the read-only mode
+    if (fpInput == NULL)                       // file not exists, print error
+    {
+        Message("UDF[Host]: Error: No StructStiff file.\n");
+        return 1;
+    }
+    fgets(line_buf, 256, fpInput); // ignore first line
+    for (int i = 0; i < row; i++)  // fill the array of node coordinates and modal displacements
+        if (fscanf(fpInput, "%lf,", structStiff + i * column + 0) <= 0 ||
+            fscanf(fpInput, "%lf,", structStiff + i * column + 1) <= 0 ||
+            fscanf(fpInput, "%lf,", structStiff + i * column + 2) <= 0) // data missing, print error
+        {
+            Message("UDF[Host]: Error: Lack of stiffness in Node %d.\n", i);
+            fclose(fpInput);
+            return 2;
+        }
+    fclose(fpInput);
+    
+    fpInput = fopen("mode/StructDamp.csv", "r");   // open the file in the read-only mode
+    if (fpInput == NULL)                       // file not exists, print error
+    {
+        Message("UDF[Host]: Error: No StructDamp file.\n");
+        return 1;
+    }
+    fgets(line_buf, 256, fpInput); // ignore first line
+    for (int i = 0; i < row; i++)  // fill the array of node coordinates and modal displacements
+        if (fscanf(fpInput, "%lf,", structDamp + i * column + 0) <= 0 ||
+            fscanf(fpInput, "%lf,", structDamp + i * column + 1) <= 0 ||
+            fscanf(fpInput, "%lf,", structDamp + i * column + 2) <= 0) // data missing, print error
+        {
+            Message("UDF[Host]: Error: Lack of damp in Node %d.\n", i);
+            fclose(fpInput);
+            return 2;
+        }
+    fclose(fpInput);
+    
     return 0;
 }
 

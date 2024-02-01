@@ -97,15 +97,22 @@ DEFINE_ON_DEMAND(Preprocess)
 #if !RP_NODE
     if (fileStatus = read_nodes_modes(fieldStruct) == 0)
     {
-        row = nNode, column = nMode * N_DOF_PER_NODE; // number of modes
+        row = nNode, column = nMode * N_DOF_PER_NODE;                                  // number of modes
         Message("UDF[Host]: Structure: r = %d, c = %d, m = %d\n", row, column, nMode); // print size of node coordinates and modal displacement and number of modes
 
         structModeDisp = (double *)malloc(row * column * sizeof(double));
         memset(structModeDisp, 0, row * column * sizeof(double));
+        structStiff = (double *)malloc(row * N_DOF_PER_NODE * sizeof(double));
+        memset(structStiff, 0, row * N_DOF_PER_NODE * sizeof(double));
+        structDamp = (double *)malloc(row * N_DOF_PER_NODE * sizeof(double));
+        memset(structDamp, 0, row * N_DOF_PER_NODE * sizeof(double));
 
-        for (int iMode = 0; iMode < nMode; iMode++)                                 // input each modal displacement
+        for (int iMode = 0; iMode < nMode; iMode++)                                         // input each modal displacement
             if (fileStatus = read_coor_mode(fieldFluid, nodeCoorDisp, modeFreq, iMode + 1)) // if file or data missing, print error
                 Message("UDF[Host]: Structure: Error: %d in %d\n", fileStatus, iMode);
+
+        if(fileStatus = read_stiff_damp())
+            Message("UDF[Host]: Structure: Error: %d\n", fileStatus);
     }
     else
         Message("UDF[Host]: Structure: Error: %d\n", fileStatus);
@@ -120,7 +127,7 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
 {
     real *const modeDispThisTime = modeDisp + iTime * nMode * N_DOF_PER_NODE;        // modal displacement this time, buffer
     real *const modeForceThisTime = modeForce + iTime * nMode, modeForceBuff[nMode]; // modal force this time, buffer
-    memset(modeDispThisTime, 0, nMode * N_DOF_PER_NODE * sizeof(real));              // allocate memory
+    memset(modeDispThisTime, 0, nMode * N_DOF_PER_NODE * sizeof(real));              // clear memory
     memset(modeForceThisTime, 0, nMode * sizeof(real));
     memset(modeForceBuff, 0, nMode * sizeof(real));
 
@@ -190,6 +197,8 @@ DEFINE_EXECUTE_AT_EXIT(Finish_process)
     free(modeForce);
     free(initVelocity);
     free(structModeDisp);
+    free(structStiff);
+    free(structDamp);
     Message0("UDF[Host]: All memories cleared!\n");
 }
 
@@ -205,6 +214,8 @@ DEFINE_ON_DEMAND(Clear_memories)
     free(modeForce);
     free(initVelocity);
     free(structModeDisp);
+    free(structStiff);
+    free(structDamp);
     Message0("UDF[Host]: All memories cleared!\n");
 }
 
