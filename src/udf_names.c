@@ -9,7 +9,7 @@ extern DEFINE_ON_DEMAND(Preprocess);
 extern DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime);
 extern DEFINE_EXECUTE_AT_END(Set_next_time_step);
 extern DEFINE_EXECUTE_AT_EXIT(Finish_process);
-extern DEFINE_PROFILE(Velocity_inlet, thread, variable_index);
+extern DEFINE_PROFILE(Velocity_inlet, thread, iVar);
  __declspec(dllexport) UDF_Data udf_data[] = {
 {"Mode_calculation", (void (*)(void))Mode_calculation, UDF_TYPE_ON_DEMAND},
 {"Preprocess", (void (*)(void))Preprocess, UDF_TYPE_ON_DEMAND},

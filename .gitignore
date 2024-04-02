@@ -11,7 +11,7 @@ mode/Mode*
 *.h5
 *.tmp
 *.flprj
-outputNode*.csv
+*.csv
 cleanup*
 *.jou
 animation/*

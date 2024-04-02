@@ -10,9 +10,10 @@
  */
 
 #include <math.h>
-#include "udf.h" // note: move udf.h to the last
+#include <udf.h> // note: move udf.h to the last
 #define NODE_MATCH_TOLERANCE 4e-7
 
+// number of dof per node
 #if RP_3D
 #define N_DOF_PER_NODE 3
 #endif
@@ -23,16 +24,16 @@
 static int iIter = 1; // record the number of the iteration steps
 static int iTime = 0; // record the number of the time steps
 
-static int nNode = 0;
-static int nMode = 0;
+static int nNode = 0;             // number of nodes in fluid
+static int nMode = 0;             // number of modes in fluid
 static real *TimeSeq = NULL;      // time sequence
-static real *modeFreq = NULL;     // frequencies of the structure // TODO: read from file
+static real *modeFreq = NULL;     // frequencies of the structure
 static real *modeForce = NULL;    // modal force
 static real *modeDisp = NULL;     // modal-displacement,modal-velocity,acceleration repeat
 static real *initVelocity = NULL; // initial modal velocity
 
-static int idFSI = 23;   // record the id of the fsi faces, shown in fluent       // TODO: read from file
-static int idFluid = 14; // record the id of the fluid cell zone, shown in fluent // TODO: read from file
+static int idFSI = 23;   // record the id of the fsi faces, shown in fluent
+static int idFluid = 14; // record the id of the fluid cell zone, shown in fluent
 
 /**
  * @brief compare nodes in order of x, y, z
@@ -271,28 +272,28 @@ int fill_modal_disp(const double *const nodeCoorDisp)
  */
 int get_mode_force(real *const modeForceThisTime, Domain *const pDomain)
 {
-    Thread *pThread = Lookup_Thread(pDomain, idFSI);
-    face_t pFace;
-    Node *pNode;
-    real AreaVector[N_DOF_PER_NODE] = {0}, Press = 0;
-    int nNodePerFace = 0, iNode = 0;
-    static int modeForceCount = 0;
+    Thread *pThread = Lookup_Thread(pDomain, idFSI);  // pointer of thread
+    face_t pFace;                                     // pointer of face
+    Node *pNode;                                      // pointer of node
+    real AreaVector[N_DOF_PER_NODE] = {0}, Press = 0; // normal vector of area, pressure
+    int nNodePerFace = 0, iNode = 0;                  // number of node per face, node index
+    static int modeForceCount = 0;                    // modal force counter
 
-    begin_f_loop(pFace, pThread)
+    begin_f_loop(pFace, pThread) // begin face loop
     {
-        F_AREA(AreaVector, pFace, pThread);
-        Press = F_P(pFace, pThread);
-        nNodePerFace = F_NNODES(pFace, pThread);
-        f_node_loop(pFace, pThread, iNode)
+        F_AREA(AreaVector, pFace, pThread);      // get normal vector
+        Press = F_P(pFace, pThread);             // get pressure
+        nNodePerFace = F_NNODES(pFace, pThread); // get number of nodes per face
+        f_node_loop(pFace, pThread, iNode)       // begin node loop
         {
-            if (PRINCIPAL_FACE_P(pFace, pThread))
+            if (PRINCIPAL_FACE_P(pFace, pThread)) // if face belong to this process
             {
-                pNode = F_NODE(pFace, pThread, iNode);
+                pNode = F_NODE(pFace, pThread, iNode); // get this node
                 // if(myid == 0 && modeForceCount > 49 && modeForceCount % 50 == 0)
                 //     Message("UDF[Node]: Modal Force: ");
-                for (int i = 0; i < nMode; i++)
+                for (int i = 0; i < nMode; i++) // for each mode
                 {
-                    modeForceThisTime[i] += 1 / (double)nNodePerFace * Press * (
+                    modeForceThisTime[i] += 1 / (double)nNodePerFace * Press * (// modal force is summation of pressure times normal vector times modal displacement
                                             AreaVector[0] * N_UDMI(pNode, i * N_DOF_PER_NODE + 0) + 
                                             AreaVector[1] * N_UDMI(pNode, i * N_DOF_PER_NODE + 1) + 
                                             AreaVector[2] * N_UDMI(pNode, i * N_DOF_PER_NODE + 2));
@@ -303,11 +304,11 @@ int get_mode_force(real *const modeForceThisTime, Domain *const pDomain)
                 //     Message("%5.1e, %5.1e, %5d",AreaVector[0], Press, nNodePerFace);
                 // if (myid == 0 && modeForceCount > 49 && modeForceCount % 50 == 0)
                 //     Message("\n");
-                modeForceCount++;
+                modeForceCount++; // modal force counter +1
             }
         }
     }
-    end_f_loop(pFace, pThread);
+    end_f_loop(pFace, pThread); // end face loop
 
     // Message("UDF[Node][%d]: ", myid);
     // for (int i = 0; i < nMode; i++)
@@ -328,44 +329,44 @@ int get_mode_force(real *const modeForceThisTime, Domain *const pDomain)
 int move_grid(const real *const modeDispThisTime,
               Domain *const pDomain)
 {
-    if (iTime <= 1)
+    if (iTime <= 1) // skip first time step
         return 0;
-    
-    Thread *pThread = Lookup_Thread(pDomain, idFluid);
-    cell_t pCell;
-    Node *pNode;
-    real dispUpdate[N_DOF_PER_NODE] = {0}, deltaDisp = 0;
-    int iNode = 0;
-    const real *const modeDispLastTime = modeDisp + (iTime - 1) * nMode * N_DOF_PER_NODE;
+
+    Thread *pThread = Lookup_Thread(pDomain, idFluid);                                    // pointer of thread
+    cell_t pCell;                                                                         // pointer of cell
+    Node *pNode;                                                                          // pointer of node
+    real dispUpdate[N_DOF_PER_NODE] = {0}, deltaDisp = 0;                                 // update displacement, displacement gap
+    int iNode = 0;                                                                        // node index
+    const real *const modeDispLastTime = modeDisp + (iTime - 1) * nMode * N_DOF_PER_NODE; // modal displacement last time
     // Message("\nUDF[Node][%d]: time step is %d, iteration is %d modal displacement are ", myid, iTime, iIter);
     // for (int i = 0; i < 9; i++)
     //     Message("%5.1e ", modeDispThisTime[i]);
     // Message("\n");
 
-    begin_c_loop_int_ext(pCell, pThread)
+    begin_c_loop_int_ext(pCell, pThread) // begin all cell loop
     {
-        c_node_loop(pCell, pThread, iNode)
+        c_node_loop(pCell, pThread, iNode) // begin node loop
         {
-            pNode = C_NODE(pCell, pThread, iNode);
-            if (NODE_POS_NEED_UPDATE(pNode))
+            pNode = C_NODE(pCell, pThread, iNode); // get node pointer
+            if (NODE_POS_NEED_UPDATE(pNode))       // if node not yet updated
             {
-                memset(dispUpdate, 0, N_DOF_PER_NODE * sizeof(real));
+                memset(dispUpdate, 0, N_DOF_PER_NODE * sizeof(real)); // clear update displacement
                 for (int i = 0; i < nMode; i++)
                 {
-                    deltaDisp = modeDispThisTime[N_DOF_PER_NODE * i] - modeDispLastTime[N_DOF_PER_NODE * i];
-                    dispUpdate[0] += deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 0);
+                    deltaDisp = modeDispThisTime[N_DOF_PER_NODE * i] - modeDispLastTime[N_DOF_PER_NODE * i]; // displacement gap
+                    dispUpdate[0] += deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 0);                      // update displacement is summation of displacement gap times each modal displacement
                     dispUpdate[1] += deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 1);
                     dispUpdate[2] += deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 2);
                 }
-                NV_V(NODE_COORD(pNode), +=, dispUpdate);
-                NODE_POS_UPDATED(pNode);
+                NV_V(NODE_COORD(pNode), +=, dispUpdate); // update node
+                NODE_POS_UPDATED(pNode);                 // indicate node updated
                 // real x = NODE_X(pNode), y = NODE_Y(pNode), z = NODE_Z(pNode);
                 // if (x >= 0.49 && x <= 0.51 && y >= 0.18 && y <=0.22 && z == 0)
                 //     Message("UDF[Node][%d]: %5.1e + %5.1e, %5.1e + %5.1e, %5.1e + %5.1e\n", myid, x, dispUpdate[0], y, dispUpdate[1], z, dispUpdate[2]);
             }
         }
     }
-    end_c_loop_int_ext(pCell, pThread)
+    end_c_loop_int_ext(pCell, pThread) // end cell loop
 
     return 0;
 }

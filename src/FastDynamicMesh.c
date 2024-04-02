@@ -181,18 +181,16 @@ DEFINE_EXECUTE_AT_EXIT(Finish_process)
  * @brief velocity inlet boundary condition
  * 
  */
-DEFINE_PROFILE(Velocity_inlet, thread, variable_index)
+DEFINE_PROFILE(Velocity_inlet, thread, iVar)
 {
-    real U = 0.9;
-    real x[3];
-    real y;
-    face_t f;
-    begin_f_loop(f, thread)
+    real inVel = 0.9, x[3] = {0}, y = 0; // inlet velocity
+    face_t pFace;                        // pointer of face
+    begin_f_loop(pFace, thread)
     {
-        F_CENTROID(x, f, thread);
+        F_CENTROID(x, pFace, thread); // coordinates of centroid of this face
         y = x[1];
         /* x[1] means the Y location, the X location was write as x[0] */
-        F_PROFILE(f, thread, variable_index) = 1.5 * U * 4 / 0.1681 * y * (0.41 - y);
+        F_PROFILE(pFace, thread, iVar) = 1.5 * inVel * 4 / 0.1681 * y * (0.41 - y);
     }
-    end_f_loop(f, thread)
+    end_f_loop(pFace, thread)
 }
