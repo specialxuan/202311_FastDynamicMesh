@@ -11,6 +11,8 @@
 
 #include <math.h>
 #include <udf.h> // note: move udf.h to the last
+
+// node match tolerance
 #define NODE_MATCH_TOLERANCE 4e-7
 
 // number of dof per node
@@ -26,6 +28,8 @@ static int iTime = 0; // record the number of the time steps
 
 static int nNodeFluid = 0;             // number of nodes in fluid
 static int nModeFluid = 0;             // number of modes in fluid
+static int nNodeStruct = 0;             // number of nodes in fluid
+static int nModeStruct = 0;             // number of modes in fluid
 static real *TimeSeq = NULL;      // time sequence
 static real *modeFreq = NULL;     // frequencies of the structure
 static real *modeForce = NULL;    // modal force
@@ -52,6 +56,133 @@ int cmp_node(const void *const a, const void *const b)
 }
 
 #if !RP_NODE
+/**
+ * @brief input number of nodes and modes of structure
+ *
+ * @return int
+ */
+int read_struct_nodes_modes()
+{
+    double nNodeFromFile = 0, nModeFromFile = 0;     // number of nodes, number of modes
+    char inFileName[30] = "mode/StructNodeCoor.csv"; // input file name
+    FILE *fpInput = fopen(inFileName, "r");          // open file read only
+    if (fpInput == NULL)                             // file not exists print error
+    {
+        Message("UDF[Host]: Error: No Struct files.\n");
+        return 1;
+    }
+    if (fscanf(fpInput, "%lf,", &nNodeFromFile) <= 0 || // ignore first number
+        fscanf(fpInput, "%lf,", &nNodeFromFile) <= 0 || // input number of nodes
+        fscanf(fpInput, "%lf,", &nModeFromFile) <= 0)   // input number of modes
+    {
+        Message("UDF[Host]: Error: Lack of Struct variables.\n");
+        fclose(fpInput);
+        return 2;
+    }
+    nNodeStruct = (int)nNodeFromFile; // number of nodes of structure
+    nModeStruct = (int)nModeFromFile; // number of modes of structure
+    fclose(fpInput);
+
+    return 0;
+}
+
+/**
+ * @brief input node coordinates and modal displacement
+ *
+ * @param structModeDisp node coordinates and modal displacements
+ * @param row row of matrix
+ * @param column column of matrix
+ * @param iMode which mode to input
+ * @return int
+ */
+int read_struct_coor_mode(double *const structModeDisp,
+                          const int row,
+                          const int column,
+                          const int iMode)
+{
+    char inFileName[30] = {0}, line_buf[256] = {0}; // input file name, ignore first line
+    if (iMode == 0)
+        sprintf(inFileName, "mode/StructNodeCoor.csv"); // read coordinate at iMode == 0
+    else
+        sprintf(inFileName, "mode/StructNodeDisp%d.csv", iMode); // read modal displacement
+
+    FILE *fpInput = fopen(inFileName, "r"); // open file read only
+    if (fpInput == NULL)                    // file not exists print error
+    {
+        Message("UDF[Host]: Error: No Struct files.\n");
+        return 1;
+    }
+
+    fgets(line_buf, 256, fpInput); // ignore first line
+    for (int i = 0; i < row; i++)  // fill the array of node coordinates and modal displacements
+        if (fscanf(fpInput, "%lf,", structModeDisp + i * column + iMode * N_DOF_PER_NODE + 0) <= 0 ||
+            fscanf(fpInput, "%lf,", structModeDisp + i * column + iMode * N_DOF_PER_NODE + 1) <= 0 ||
+            fscanf(fpInput, "%lf,", structModeDisp + i * column + iMode * N_DOF_PER_NODE + 2) <= 0) // data missing, print error
+        {
+            Message("UDF[Host]: Error: Lack of variables in Mode %d, Node %d.\n", iMode, i);
+            fclose(fpInput);
+            return 2;
+        }
+
+    fclose(fpInput);
+
+    return 0;
+}
+
+/**
+ * @brief input structure stiffness and damping matrices
+ *
+ * @param structStiff structure stiffness
+ * @param structDamp structure damping
+ * @param row row of matrices
+ * @param column column of matrices
+ * @return int
+ */
+int read_struct_stiff_damp(double *const structStiff,
+                           double *const structDamp,
+                           const int row,
+                           const int column)
+{
+    char line_buf[256] = {0};                           // ignore first line
+    FILE *fpInput = fopen("mode/StructStiff.csv", "r"); // open file read only
+    if (fpInput == NULL)                                // file not exists print error
+    {
+        Message("UDF[Host]: Error: No StructStiff file.\n");
+        return 1;
+    }
+    fgets(line_buf, 256, fpInput); // ignore first line
+    for (int i = 0; i < row; i++)  // fill the array of node coordinates and modal displacements
+        if (fscanf(fpInput, "%lf,", structStiff + i * column + 0) <= 0 ||
+            fscanf(fpInput, "%lf,", structStiff + i * column + 1) <= 0 ||
+            fscanf(fpInput, "%lf,", structStiff + i * column + 2) <= 0) // data missing, print error
+        {
+            Message("UDF[Host]: Error: Lack of stiffness in Node %d.\n", i);
+            fclose(fpInput);
+            return 2;
+        }
+    fclose(fpInput);
+
+    fpInput = fopen("mode/StructDamp.csv", "r"); // open file read only
+    if (fpInput == NULL)                         // file not exists print error
+    {
+        Message("UDF[Host]: Error: No StructDamp file.\n");
+        return 1;
+    }
+    fgets(line_buf, 256, fpInput); // ignore first line
+    for (int i = 0; i < row; i++)  // fill the array of node coordinates and modal displacements
+        if (fscanf(fpInput, "%lf,", structDamp + i * column + 0) <= 0 ||
+            fscanf(fpInput, "%lf,", structDamp + i * column + 1) <= 0 ||
+            fscanf(fpInput, "%lf,", structDamp + i * column + 2) <= 0) // data missing, print error
+        {
+            Message("UDF[Host]: Error: Lack of damp in Node %d.\n", i);
+            fclose(fpInput);
+            return 2;
+        }
+    fclose(fpInput);
+
+    return 0;
+}
+
 /**
  * @brief input size of node coordinates and modal displacement
  *
@@ -270,7 +401,7 @@ int fill_modal_disp(const double *const nodeCoorDisp)
  * @param pDomain pointer of domain
  * @return int
  */
-int get_mode_force(real *const modeForceThisTime, Domain *const pDomain)
+int get_fluid_mode_force(real *const modeForceThisTime, Domain *const pDomain)
 {
     Thread *pThread = Lookup_Thread(pDomain, idFSI);  // pointer of thread
     face_t pFace;                                     // pointer of face

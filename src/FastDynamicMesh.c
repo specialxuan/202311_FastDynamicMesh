@@ -2,7 +2,7 @@
  * @file FastDynamicMesh.c
  * @author SpecialXuan (special.xuan@outlook.com)
  * @brief
- * @version 0.1
+ * @version 1.1
  * @date 2023-12-31
  *
  * @copyright Copyright (c) 2023
@@ -10,7 +10,7 @@
  */
 
 #include "fdmUtils.h"
-#include "udf.h"
+#include <udf.h>
 
 /**
  * @brief calculate modal displacement
@@ -31,9 +31,6 @@ DEFINE_ON_DEMAND(Mode_calculation)
  */
 DEFINE_ON_DEMAND(Preprocess)
 {
-    int row = 0, column = 0, fileStatus = 0; // size of node coordinates and modal displacements, number of modes, status of input file(0 is noError, 1 is Missing files, 2 is Missing data
-    double *nodeCoorDisp = NULL;             // node coordinates and modal displacements
-
     iIter = 1; // initialise iteration index
     iTime = 0; // initialise time index
 
@@ -41,6 +38,7 @@ DEFINE_ON_DEMAND(Preprocess)
     // RP_Set_Float(char *s, double v)-RP_Set_Float("flow-time", 0.2)
     RP_Set_Float("flow-time", 0); // set  flow time
 
+    int fileStatus = 0;                    // size of node coordinates and modal displacements, number of modes, status of input file(0 is noError, 1 is Missing files, 2 is Missing data
 #if !RP_NODE                               // run in host process
     fileStatus = read_fluid_nodes_modes(); // input size of node coordinates and modal displacement
 #endif
@@ -48,17 +46,19 @@ DEFINE_ON_DEMAND(Preprocess)
     host_to_node_int_1(fileStatus); // broadcast file status to all node process
     if (fileStatus == 0)            // if no error
     {
-        host_to_node_int_2(nNodeFluid, nModeFluid);                     // broadcast size to all node process
-        row = nNodeFluid, column = (nModeFluid + 1) * N_DOF_PER_NODE;   // number of modes
+        host_to_node_int_2(nNodeFluid, nModeFluid);                       // broadcast size to all node process
+        int row = nNodeFluid, column = (nModeFluid + 1) * N_DOF_PER_NODE; // number of modes
+
+        double *nodeCoorDisp = NULL;                                    // node coordinates and modal displacements
         nodeCoorDisp = (double *)malloc(row * column * sizeof(double)); // allocate memory for nodeCoorDisp
         memset(nodeCoorDisp, 0, row * column * sizeof(double));         // initialize nodeCoorDisp
         modeFreq = (real *)malloc(nModeFluid * sizeof(real));           // allocate memory for mode frequency
         memset(modeFreq, 0, nModeFluid * sizeof(real));                 // initialize frequency
 
-#if !RP_NODE // run in host process
+#if !RP_NODE                                                                     // run in host process
         Message("UDF[Host]: r = %d, c = %d, m = %d\n", row, column, nModeFluid); // print size of node coordinates and modal displacement and number of modes
-        
-        for (int iMode = 0; iMode < nModeFluid + 1; iMode++)                     // input each modal displacement
+
+        for (int iMode = 0; iMode < nModeFluid + 1; iMode++)                      // input each modal displacement
             if (fileStatus = read_fluid_coor_mode(nodeCoorDisp, modeFreq, iMode)) // if file or data missing, print error
                 Message("UDF[Host]: Error: %d in %d\n", fileStatus, iMode);
 
@@ -82,13 +82,13 @@ DEFINE_ON_DEMAND(Preprocess)
         memset(modeForce, 0, 100000 * nModeFluid * sizeof(real));
         modeDisp = (real *)malloc(100000 * N_DOF_PER_NODE * nModeFluid * sizeof(real));
         memset(modeDisp, 0, 100000 * N_DOF_PER_NODE * nModeFluid * sizeof(real));
-        initVelocity = (real *)malloc(4 * sizeof(real));
-        memset(initVelocity, 0, 4 * sizeof(real));
+        initVelocity = (real *)malloc(nModeFluid * sizeof(real));
+        memset(initVelocity, 0, nModeFluid * sizeof(real));
+
+        free(nodeCoorDisp);
     }
     else
         Message("UDF[Host]: Error: %d\n", fileStatus);
-
-    free(nodeCoorDisp);
 }
 
 /**
@@ -107,7 +107,7 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
     // calculate modal force on structure
 #endif
 #if !RP_HOST
-    get_mode_force(modeForceThisTime, pDomain); // get modal force
+    get_fluid_mode_force(modeForceThisTime, pDomain); // get modal force
     // Message("UDF[Node][%d]: ", myid);
     // for (int i = 0; i < nModeFluid; i++)
     //     Message("%5.1e, ", modeForceThisTime[i]);
