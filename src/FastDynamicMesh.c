@@ -38,8 +38,47 @@ DEFINE_ON_DEMAND(Preprocess)
     // RP_Set_Float(char *s, double v)-RP_Set_Float("flow-time", 0.2)
     RP_Set_Float("flow-time", 0); // set  flow time
 
-    int fileStatus = 0;                    // size of node coordinates and modal displacements, number of modes, status of input file(0 is noError, 1 is Missing files, 2 is Missing data
-#if !RP_NODE                               // run in host process
+    int fileStatus = 0;                                // size of node coordinates and modal displacements, number of modes, status of input file(0 is noError, 1 is Missing files, 2 is Missing data
+#if !RP_NODE                                           // run in host process
+    if ((fileStatus = read_struct_nodes_modes()) == 0) // input number of nodes and modes in structure
+    {
+        int row = nNodeStruct, column = nModeStruct * N_DOF_PER_NODE;                        // size of structure modal displacement matrix
+        Message("UDF[Host]: Structure: r = %d, c = %d, m = %d\n", row, column, nModeStruct); // print size of structure modal displacement and number of modes
+
+        structModeDisp = (double *)malloc(row * column * sizeof(double)); // allocate memories
+        memset(structModeDisp, 0, row * column * sizeof(double));         // initialize
+        structStiff = (double *)malloc(row * N_DOF_PER_NODE * sizeof(double));
+        memset(structStiff, 0, row * N_DOF_PER_NODE * sizeof(double));
+        structDamp = (double *)malloc(row * N_DOF_PER_NODE * sizeof(double));
+        memset(structDamp, 0, row * N_DOF_PER_NODE * sizeof(double));
+        structLoad = (double *)malloc(row * N_DOF_PER_NODE * sizeof(double));
+        memset(structLoad, 0, row * N_DOF_PER_NODE * sizeof(double));
+        modeForceStruct = (real *)malloc(nModeStruct * sizeof(real));
+        memset(modeForceStruct, 0, nModeStruct * sizeof(real));
+
+        for (int iMode = 0; iMode < nModeStruct; iMode++)                                   // input each modal displacement
+            if (fileStatus = read_struct_coor_mode(structModeDisp, row, column, iMode + 1)) // if file or data missing, print error
+                Message("UDF[Host]: Error: Structure: %d in %d\n", fileStatus, iMode);
+        
+        // for (int i = 0; i < 5; i++)
+        // {
+        //     for (int j = 0; j < column; j++)
+        //     {
+        //         Message("%5.1e, ", structModeDisp[i * column + j]);
+        //     }
+        //     Message("\n");
+        // }
+        
+
+        if (fileStatus = read_struct_stiff_damp_load(structStiff, structDamp, structLoad, row, N_DOF_PER_NODE)) // input stiffness and damping vector
+            Message("UDF[Host]: Error: Structure: %d\n", fileStatus);
+    }
+    else
+    {
+        nModeStruct = nNodeStruct = 0;
+        Message("UDF[Host]: Structure: Error: %d\n", fileStatus); // if no file print error
+    }
+
     fileStatus = read_fluid_nodes_modes(); // input size of node coordinates and modal displacement
 #endif
 
@@ -76,6 +115,8 @@ DEFINE_ON_DEMAND(Preprocess)
         fill_modal_disp(nodeCoorDisp);
 #endif
 
+        nModeFewer = nModeFluid < nModeStruct ? nModeFluid : nModeStruct;
+
         TimeSeq = (real *)malloc(100000 * sizeof(real));
         memset(TimeSeq, 0, 100000 * sizeof(real));
         modeForce = (real *)malloc(100000 * nModeFluid * sizeof(real));
@@ -105,10 +146,19 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
 
 #if !RP_NODE
     // calculate modal force on structure
+    if (nModeStruct > 0)
+    {
+        memset(modeForceStruct, 0, nModeStruct * sizeof(real));
+        get_struct_mode_force(modeForceStruct);
+        Message("UDF[Host]: Structure mode forces are:");
+        for (int i = 0; i < nModeStruct; i++)
+            Message("%5.1e, ", modeForceStruct[i]);
+        Message("\n");
+    }
 #endif
 #if !RP_HOST
     get_fluid_mode_force(modeForceThisTime, pDomain); // get modal force
-    // Message("UDF[Node][%d]: ", myid);
+    // Message("UDF[Node][%d]: Fluid mode forces are:", myid);
     // for (int i = 0; i < nModeFluid; i++)
     //     Message("%5.1e, ", modeForceThisTime[i]);
     // Message("\n");
@@ -118,15 +168,26 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
     node_to_host_real(modeForceThisTime, nModeFluid);
 
 #if !RP_NODE
-    // Message("UDF[Host]: time step is %d, iteration is %d modal forces are ",iTime, iIter);
-    // for (int i = 0; i < nModeFluid; i++)
-    //     Message("%5.1e ", modeForceThisTime[i]);
-    // Message("\n");
+    Message("UDF[Host]: time step is %d, iteration is %d, modal F are ", iTime, iIter);
+    for (int i = 0; i < nModeFluid; i++)
+        Message("%5.1e ", modeForceThisTime[i]);
+    Message("\n");
+
+    // for (int i = 0; i < nModeFewer; i++)
+    // {
+    //     Message("i = %d\n", i);
+    //     modeForceThisTime[i] += modeForceStruct[i];
+    // }
+
+    Message("UDF[Host]: time step is %d, iteration is %d, modal F are ", iTime, iIter);
+    for (int i = 0; i < nModeFluid; i++)
+        Message("%5.1e ", modeForceThisTime[i]);
+    Message("\n");
     wilson_theta(modeForceThisTime, modeDispThisTime, dTime);
-    // Message("UDF[Host]: time step is %d, iteration is %d modal displacement are ",iTime, iIter);
-    // for (int i = 0; i < 9; i++)
-    //     Message("%5.1e ", modeDispThisTime[i]);
-    // Message("\n");
+    Message("UDF[Host]: time step is %d, iteration is %d, modal D are ", iTime, iIter);
+    for (int i = 0; i < 9; i++)
+        Message("%5.1e ", modeDispThisTime[i]);
+    Message("\n");
 #endif
 
     host_to_node_real(modeDispThisTime, N_DOF_PER_NODE * nModeFluid); // broadcast modal displacement to node process

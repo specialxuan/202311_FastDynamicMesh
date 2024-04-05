@@ -26,15 +26,21 @@
 static int iIter = 1; // record the number of the iteration steps
 static int iTime = 0; // record the number of the time steps
 
-static int nNodeFluid = 0;             // number of nodes in fluid
-static int nModeFluid = 0;             // number of modes in fluid
-static int nNodeStruct = 0;             // number of nodes in fluid
-static int nModeStruct = 0;             // number of modes in fluid
-static real *TimeSeq = NULL;      // time sequence
-static real *modeFreq = NULL;     // frequencies of the structure
-static real *modeForce = NULL;    // modal force
-static real *modeDisp = NULL;     // modal-displacement,modal-velocity,acceleration repeat
-static real *initVelocity = NULL; // initial modal velocity
+static int nNodeFluid = 0;            // number of nodes in fluid
+static int nModeFluid = 0;            // number of modes in fluid
+static int nModeFewer = 0;            // number of modes in fluid
+static int nNodeStruct = 0;           // number of nodes in fluid
+static int nModeStruct = 0;           // number of modes in fluid
+static double *structModeDisp = NULL; // structure modal displacement
+static double *structStiff = NULL;    // structure stiffness
+static double *structDamp = NULL;     // structure damping
+static double *structLoad = NULL;    // structure forces
+static real *TimeSeq = NULL;          // time sequence
+static real *modeFreq = NULL;         // frequencies of the structure
+static real *modeForce = NULL;        // modal force
+static real *modeForceStruct = NULL;        // modal force
+static real *modeDisp = NULL;         // modal-displacement,modal-velocity,acceleration repeat
+static real *initVelocity = NULL;     // initial modal velocity
 
 static int idFSI = 23;   // record the id of the fsi faces, shown in fluent
 static int idFluid = 14; // record the id of the fluid cell zone, shown in fluent
@@ -115,9 +121,9 @@ int read_struct_coor_mode(double *const structModeDisp,
 
     fgets(line_buf, 256, fpInput); // ignore first line
     for (int i = 0; i < row; i++)  // fill the array of node coordinates and modal displacements
-        if (fscanf(fpInput, "%lf,", structModeDisp + i * column + iMode * N_DOF_PER_NODE + 0) <= 0 ||
-            fscanf(fpInput, "%lf,", structModeDisp + i * column + iMode * N_DOF_PER_NODE + 1) <= 0 ||
-            fscanf(fpInput, "%lf,", structModeDisp + i * column + iMode * N_DOF_PER_NODE + 2) <= 0) // data missing, print error
+        if (fscanf(fpInput, "%lf,", structModeDisp + i * column + (iMode - 1) * N_DOF_PER_NODE + 0) <= 0 ||
+            fscanf(fpInput, "%lf,", structModeDisp + i * column + (iMode - 1) * N_DOF_PER_NODE + 1) <= 0 ||
+            fscanf(fpInput, "%lf,", structModeDisp + i * column + (iMode - 1) * N_DOF_PER_NODE + 2) <= 0) // data missing, print error
         {
             Message("UDF[Host]: Error: Lack of variables in Mode %d, Node %d.\n", iMode, i);
             fclose(fpInput);
@@ -138,10 +144,11 @@ int read_struct_coor_mode(double *const structModeDisp,
  * @param column column of matrices
  * @return int
  */
-int read_struct_stiff_damp(double *const structStiff,
-                           double *const structDamp,
-                           const int row,
-                           const int column)
+int read_struct_stiff_damp_load(double *const structStiff,
+                                double *const structDamp,
+                                double *const structLoad,
+                                const int row,
+                                const int column)
 {
     char line_buf[256] = {0};                           // ignore first line
     FILE *fpInput = fopen("mode/StructStiff.csv", "r"); // open file read only
@@ -173,6 +180,24 @@ int read_struct_stiff_damp(double *const structStiff,
         if (fscanf(fpInput, "%lf,", structDamp + i * column + 0) <= 0 ||
             fscanf(fpInput, "%lf,", structDamp + i * column + 1) <= 0 ||
             fscanf(fpInput, "%lf,", structDamp + i * column + 2) <= 0) // data missing, print error
+        {
+            Message("UDF[Host]: Error: Lack of damp in Node %d.\n", i);
+            fclose(fpInput);
+            return 2;
+        }
+    fclose(fpInput);
+
+    fpInput = fopen("mode/StructLoad.csv", "r"); // open file read only
+    if (fpInput == NULL)                         // file not exists print error
+    {
+        Message("UDF[Host]: Error: No StructLoad file.\n");
+        return 1;
+    }
+    fgets(line_buf, 256, fpInput); // ignore first line
+    for (int i = 0; i < row; i++)  // fill the array of node coordinates and modal displacements
+        if (fscanf(fpInput, "%lf,", structLoad + i * column + 0) <= 0 ||
+            fscanf(fpInput, "%lf,", structLoad + i * column + 1) <= 0 ||
+            fscanf(fpInput, "%lf,", structLoad + i * column + 2) <= 0) // data missing, print error
         {
             Message("UDF[Host]: Error: Lack of damp in Node %d.\n", i);
             fclose(fpInput);
@@ -254,6 +279,55 @@ int read_fluid_coor_mode(double *const nodeCoorDisp, real *const modeFreq, const
 
     fclose(fpInput);
 
+    return 0;
+}
+
+/**
+ * @brief Get structural modal force
+ *
+ * @param modeForceStruct structural modal force
+ * @return int
+ */
+int get_struct_mode_force(real *const modeForceStruct)
+{
+    if (iTime <= 1) // skip first time step
+        return 0;
+
+    const real Dis = modeDisp[(iTime - 1) * nModeFluid * 3 + 0]; // modal displacement last time
+    const real Vel = modeDisp[(iTime - 1) * nModeFluid * 3 + 1]; // modal displacement last time
+    double *Stiff = (double *)malloc(nModeStruct * sizeof(double));
+    memset(Stiff, 0, nModeStruct * sizeof(double));
+    double *Damp = (double *)malloc(nModeStruct * sizeof(double));
+    memset(Damp, 0, nModeStruct * sizeof(double));
+    double *Load = (double *)malloc(nModeStruct * sizeof(double));
+    memset(Load, 0, nModeStruct * sizeof(double));
+
+    for (int iMode = 0; iMode < nModeStruct; iMode++)
+    {
+        for (int iNode = 0; iNode < nNodeStruct; iNode++)
+        {
+            int M = iNode * nModeStruct * N_DOF_PER_NODE + iMode * N_DOF_PER_NODE, N = iNode * N_DOF_PER_NODE;
+            // if (iMode == nModeStruct -1 && iNode == nNodeStruct - 1)
+            // {
+            //     Message("M = %d, N = %d\n", M, N);
+            // }
+            
+            Stiff[iMode] += structStiff[N + 0] * structModeDisp[N + 0] * structModeDisp[M + 0] +
+                            structStiff[N + 1] * structModeDisp[N + 1] * structModeDisp[M + 1] +
+                            structStiff[N + 2] * structModeDisp[N + 2] * structModeDisp[M + 2];
+            Damp[iMode] += structDamp[N + 0] * structModeDisp[N + 0] * structModeDisp[M + 0] +
+                           structDamp[N + 1] * structModeDisp[N + 1] * structModeDisp[M + 1] +
+                           structDamp[N + 2] * structModeDisp[N + 2] * structModeDisp[M + 2];
+            Load[iMode] += structLoad[N + 0] * structModeDisp[M + 0] +
+                           structLoad[N + 1] * structModeDisp[M + 1] +
+                           structLoad[N + 2] * structModeDisp[M + 2];
+        }
+        modeForceStruct[iMode] = (real)(Dis * Stiff[iMode] + Vel * Damp[iMode] + Load[iMode]);
+    }
+\
+    free(Stiff);
+    free(Damp);
+    free(Load);
     return 0;
 }
 
