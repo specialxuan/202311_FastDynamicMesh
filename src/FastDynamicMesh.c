@@ -210,6 +210,41 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
     for (int i = 0; i < nModeFluid; i++)
         Message("%5.4e ", modeForce[iTime * nModeFluid + i]);
     Message("\n");
+    
+    FILE *fpOutput = fopen("Result.csv", "a");
+    if (iTime == 0)
+    {
+        time_t timep;
+        time(&timep);
+        fprintf(fpOutput, "Calculation starts at %s", asctime(gmtime(&timep)));
+        fprintf(fpOutput, "                Time,");
+        for (int i = 0; i < nModeFluid; i++)
+        {
+            fprintf(fpOutput, "             Force%2d,", i + 1);
+        }
+        for (int i = 0; i < nModeFluid; i++)
+        {
+            fprintf(fpOutput, "      Displacement%2d,", i * N_DOF_PER_NODE + 0 + 1);
+            fprintf(fpOutput, "      Displacement%2d,", i * N_DOF_PER_NODE + 1 + 1);
+            fprintf(fpOutput, "      Displacement%2d,", i * N_DOF_PER_NODE + 2 + 1);
+        }
+
+        fprintf(fpOutput, "\n");
+    }
+    fprintf(fpOutput, "%20.10e,", CURRENT_TIME);
+    for (int i = 0; i < nModeFluid; i++)
+    {
+        fprintf(fpOutput, "%20.10e,", modeForce[iTime * nModeFluid + i]);
+    }
+    for (int i = 0; i < nModeFluid; i++)
+    {
+        fprintf(fpOutput, "%20.10e,%20.10e,%20.10e,",
+                modeDisp[iTime * nModeFluid * N_DOF_PER_NODE + i * nModeFluid + 0],
+                modeDisp[iTime * nModeFluid * N_DOF_PER_NODE + i * nModeFluid + 1],
+                modeDisp[iTime * nModeFluid * N_DOF_PER_NODE + i * nModeFluid + 2]);
+    }
+    fprintf(fpOutput, "\n");
+    fclose(fpOutput);
 #endif
 
     PRF_GSYNC();

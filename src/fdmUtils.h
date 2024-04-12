@@ -10,6 +10,7 @@
  */
 
 #include <math.h>
+#include <time.h>
 #include <udf.h> // note: move udf.h to the last
 
 // node match tolerance
