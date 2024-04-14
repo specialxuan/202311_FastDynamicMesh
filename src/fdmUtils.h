@@ -2,7 +2,7 @@
  * @file fdmUtils.h
  * @author Special (special.xuan@outlook.com)
  * @brief
- * @version 0.1
+ * @version 1.2.1
  * @date 2023-12-30
  *
  * @copyright Copyright (c) 2023
@@ -35,11 +35,11 @@ static int nModeStruct = 0;           // number of modes in fluid
 static double *structModeDisp = NULL; // structure modal displacement
 static double *structStiff = NULL;    // structure stiffness
 static double *structDamp = NULL;     // structure damping
-static double *structLoad = NULL;    // structure forces
+static double *structLoad = NULL;     // structure forces
 static real *TimeSeq = NULL;          // time sequence
 static real *modeFreq = NULL;         // frequencies of the structure
 static real *modeForce = NULL;        // modal force
-static real *modeForceStruct = NULL;        // modal force
+static real *modeForceStruct = NULL;  // modal force
 static real *modeDisp = NULL;         // modal-displacement,modal-velocity,acceleration repeat
 static real *initVelocity = NULL;     // initial modal velocity
 
@@ -216,9 +216,9 @@ int read_struct_stiff_damp_load(double *const structStiff,
  */
 int read_fluid_nodes_modes()
 {
-    double nNodeFromFile = 0, nModeFromFile = 0;     // number of nodes, number of modes
+    double nNodeFromFile = 0, nModeFromFile = 0;          // number of nodes, number of modes
     FILE *fpInput = fopen("mode/FluidNodeCoor.csv", "r"); // open the file in the read-only mode
-    if (fpInput == NULL)                             // file not exists, print error
+    if (fpInput == NULL)                                  // file not exists, print error
     {
         Message("UDF[Host]: Error: No file.\n");
         return 1;
@@ -234,7 +234,7 @@ int read_fluid_nodes_modes()
     nNodeFluid = (int)nNodeFromFile; // rows of node coordinates and modal displacement
     nModeFluid = (int)nModeFromFile; // columns of node coordinates and modal displacement
     fclose(fpInput);
-   
+
     return 0;
 }
 
@@ -294,39 +294,37 @@ int get_struct_mode_force(real *const modeForceStruct)
     if (iTime <= 1) // skip first time step
         return 0;
 
-    const real Dis = modeDisp[(iTime - 1) * nModeFluid * 3 + 0]; // modal displacement last time
-    const real Vel = modeDisp[(iTime - 1) * nModeFluid * 3 + 1]; // modal displacement last time
-    double *Stiff = (double *)malloc(nModeStruct * sizeof(double));
+    const real Dis = modeDisp[(iTime - 1) * nModeFluid * 3 + 0];    // modal displacement last time
+    const real Vel = modeDisp[(iTime - 1) * nModeFluid * 3 + 1];    // modal velocity last time
+    double *Stiff = (double *)malloc(nModeStruct * sizeof(double)); // Stiffness Force
     memset(Stiff, 0, nModeStruct * sizeof(double));
-    double *Damp = (double *)malloc(nModeStruct * sizeof(double));
+    double *Damp = (double *)malloc(nModeStruct * sizeof(double)); // Damp Force
     memset(Damp, 0, nModeStruct * sizeof(double));
-    double *Load = (double *)malloc(nModeStruct * sizeof(double));
+    double *Load = (double *)malloc(nModeStruct * sizeof(double)); // Load Force
     memset(Load, 0, nModeStruct * sizeof(double));
 
     for (int iMode = 0; iMode < nModeStruct; iMode++)
     {
         for (int iNode = 0; iNode < nNodeStruct; iNode++)
         {
-            int M = iNode * nModeStruct * N_DOF_PER_NODE + iMode * N_DOF_PER_NODE, N = iNode * N_DOF_PER_NODE;
+            int M = iNode * nModeStruct * N_DOF_PER_NODE + iMode * N_DOF_PER_NODE, N = iNode * N_DOF_PER_NODE; // indices
             // if (iMode == nModeStruct -1 && iNode == nNodeStruct - 1)
-            // {
             //     Message("M = %d, N = %d\n", M, N);
-            // }
-            
+
             Stiff[iMode] += structStiff[N + 0] * structModeDisp[N + 0] * structModeDisp[M + 0] +
                             structStiff[N + 1] * structModeDisp[N + 1] * structModeDisp[M + 1] +
-                            structStiff[N + 2] * structModeDisp[N + 2] * structModeDisp[M + 2];
+                            structStiff[N + 2] * structModeDisp[N + 2] * structModeDisp[M + 2]; // stiffness force = K * x * x
             Damp[iMode] += structDamp[N + 0] * structModeDisp[N + 0] * structModeDisp[M + 0] +
                            structDamp[N + 1] * structModeDisp[N + 1] * structModeDisp[M + 1] +
-                           structDamp[N + 2] * structModeDisp[N + 2] * structModeDisp[M + 2];
+                           structDamp[N + 2] * structModeDisp[N + 2] * structModeDisp[M + 2]; // damp force = C * x * x
             Load[iMode] += structLoad[N + 0] * structModeDisp[M + 0] +
                            structLoad[N + 1] * structModeDisp[M + 1] +
-                           structLoad[N + 2] * structModeDisp[M + 2];
+                           structLoad[N + 2] * structModeDisp[M + 2]; // load force = F * x
         }
-        modeForceStruct[iMode] = (real)(Dis * Stiff[iMode] + Vel * Damp[iMode] + Load[iMode]);
+        modeForceStruct[iMode] = (real)(Dis * Stiff[iMode] + Vel * Damp[iMode] + Load[iMode]); // f = F * x + D * K * x * x + V * C * x * x
     }
-\
-    free(Stiff);
+
+    free(Stiff); // clear memories
     free(Damp);
     free(Load);
     return 0;
@@ -352,21 +350,21 @@ int wilson_theta(const real *const modeForceThisTime,
     {
         for (int i = 0; i < nModeFluid; i++)
         {
-            modeDispThisTime[i * 3 + 0] = 0;
-            modeDispThisTime[i * 3 + 1] = initVelocity[i];
-            modeDispThisTime[i * 3 + 2] = modeForceThisTime[i];
+            modeDispThisTime[i * 3 + 0] = 0;                    // D0 = 0
+            modeDispThisTime[i * 3 + 1] = initVelocity[i];      // V0
+            modeDispThisTime[i * 3 + 2] = modeForceThisTime[i]; // A0 = F0
         }
     }
     else
     {
-        const real *const modeDispLastTime = modeDisp + (iTime - 1) * nModeFluid * 3;
-        const real *const modeForceLastTime = modeForce + (iTime - 1) * nModeFluid;
+        const real *const modeDispLastTime = modeDisp + (iTime - 1) * nModeFluid * 3; // modal displacement last time
+        const real *const modeForceLastTime = modeForce + (iTime - 1) * nModeFluid;   // modal force last time
         for (int i = 0; i < nModeFluid; i++)
         {
             real dis = 0, vel = 0, acc = 0;
-            const real disLast = modeDispLastTime[i * 3 + 0],
-                       velLast = modeDispLastTime[i * 3 + 1],
-                       accLast = modeDispLastTime[i * 3 + 2];
+            const real disLast = modeDispLastTime[i * 3 + 0], // displacement last time
+                       velLast = modeDispLastTime[i * 3 + 1],        // velocity last time
+                       accLast = modeDispLastTime[i * 3 + 2];        // acceleration last time
 
             // calculate modal displacement, acceleration, velocity using wilson-theta method
             dis = modeForceLastTime[i] + Theta * (modeForceThisTime[i] - modeForceLastTime[i]);
@@ -380,15 +378,14 @@ int wilson_theta(const real *const modeForceThisTime,
             // calculate displacement
             dis = disLast + dTime * velLast + SQR(dTime) / 6 * (acc + 2 * accLast);
 
-            modeDispThisTime[i * 3 + 0] = dis;
-            modeDispThisTime[i * 3 + 1] = vel;
-            modeDispThisTime[i * 3 + 2] = acc;
+            modeDispThisTime[i * 3 + 0] = dis; // displacement this time
+            modeDispThisTime[i * 3 + 1] = vel; // velocity this time
+            modeDispThisTime[i * 3 + 2] = acc; // displacement this time
         }
     }
 
     return 0;
 }
-
 #endif
 
 #if !RP_HOST
@@ -411,9 +408,9 @@ int fill_modal_disp(const double *const nodeCoorDisp)
     int iNode = 0, nodeCount = 0, UDMIColumn = column - N_DOF_PER_NODE; // node index, total number of node, columns of UDMI
     double node_coor[N_DOF_PER_NODE] = {0}, *thisNode = NULL;           // buffer of node coordinate, pointer of this node
 
-    char outFileName[30] = {0};                     // output file name
+    char outFileName[30] = {0};                          // output file name
     sprintf(outFileName, "FluidOutputNode%d.csv", myid); // output file name of each node process
-    FILE *fpOutput = fopen(outFileName, "w+");      // open output file in write mode
+    FILE *fpOutput = fopen(outFileName, "w+");           // open output file in write mode
 
     pDomain = Get_Domain(1);        // for single-phase flows, domain_id is 1 and Get_Domain(1) returns the fluid domain pointer
     thread_loop_c(pThread, pDomain) // loop thread in domain
@@ -423,7 +420,7 @@ int fill_modal_disp(const double *const nodeCoorDisp)
             c_node_loop(pCell, pThread, iNode) // loop node in cell
             {
                 pNode = C_NODE(pCell, pThread, iNode); // get node pointer
-                N_UDMI(pNode, UDMIColumn) = 0;         // last column of UDMI is 0 indicates not set, 1 indicates set
+                N_UDMI(pNode, UDMIColumn) = 0;                         // last column of UDMI is 0 indicates not set, 1 indicates set
             }
         }
         end_c_loop_int_ext(pCell, pThread) // finish cell loop
@@ -538,11 +535,11 @@ int move_grid(const real *const modeDispThisTime,
     if (iTime <= 1) // skip first time step
         return 0;
 
-    Thread *pThread = Lookup_Thread(pDomain, idFluid);                                    // pointer of thread
-    cell_t pCell;                                                                         // pointer of cell
-    Node *pNode;                                                                          // pointer of node
-    real dispUpdate[N_DOF_PER_NODE] = {0}, deltaDisp = 0;                                 // update displacement, displacement gap
-    int iNode = 0;                                                                        // node index
+    Thread *pThread = Lookup_Thread(pDomain, idFluid);                                         // pointer of thread
+    cell_t pCell;                                                                              // pointer of cell
+    Node *pNode;                                                                               // pointer of node
+    real dispUpdate[N_DOF_PER_NODE] = {0}, deltaDisp = 0;                                      // update displacement, displacement gap
+    int iNode = 0;                                                                             // node index
     const real *const modeDispLastTime = modeDisp + (iTime - 1) * nModeFluid * N_DOF_PER_NODE; // modal displacement last time
     // Message("\nUDF[Node][%d]: time step is %d, iteration is %d modal displacement are ", myid, iTime, iIter);
     // for (int i = 0; i < 9; i++)
@@ -574,7 +571,6 @@ int move_grid(const real *const modeDispThisTime,
     }
     end_c_loop_int_ext(pCell, pThread) // end cell loop
 
-    return 0;
+        return 0;
 }
-
 #endif

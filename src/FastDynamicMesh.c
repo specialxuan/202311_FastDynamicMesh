@@ -2,7 +2,7 @@
  * @file FastDynamicMesh.c
  * @author SpecialXuan (special.xuan@outlook.com)
  * @brief
- * @version 1.1
+ * @version 1.2.1
  * @date 2023-12-31
  *
  * @copyright Copyright (c) 2023
@@ -18,10 +18,12 @@
  */
 DEFINE_ON_DEMAND(Mode_calculation)
 {
-#if !RP_NODE                           // run on host process
-    system("ModeCalculation.bat");     // execute apdl batch
+#if !RP_NODE                            // run on host process
+    system("ModeCalculation.bat");      // execute apdl batch
+    if (read_struct_nodes_modes() == 0) // check if files generated
+        Message("UDF[Host]: Struct Files Generated\n");
     if (read_fluid_nodes_modes() == 0) // check if files generated
-        Message("UDF[Host]: Files Generated\n");
+        Message("UDF[Host]: Fluid Files Generated\n");
 #endif
 }
 
@@ -59,16 +61,13 @@ DEFINE_ON_DEMAND(Preprocess)
         for (int iMode = 0; iMode < nModeStruct; iMode++)                                   // input each modal displacement
             if (fileStatus = read_struct_coor_mode(structModeDisp, row, column, iMode + 1)) // if file or data missing, print error
                 Message("UDF[Host]: Error: Structure: %d in %d\n", fileStatus, iMode);
-        
+
         // for (int i = 0; i < 5; i++)
         // {
         //     for (int j = 0; j < column; j++)
-        //     {
         //         Message("%5.1e, ", structModeDisp[i * column + j]);
-        //     }
         //     Message("\n");
         // }
-        
 
         if (fileStatus = read_struct_stiff_damp_load(structStiff, structDamp, structLoad, row, N_DOF_PER_NODE)) // input stiffness and damping vector
             Message("UDF[Host]: Error: Structure: %d\n", fileStatus);
@@ -115,18 +114,23 @@ DEFINE_ON_DEMAND(Preprocess)
         fill_modal_disp(nodeCoorDisp);
 #endif
 
-        nModeFewer = nModeFluid < nModeStruct ? nModeFluid : nModeStruct;
+        nModeFewer = nModeFluid < nModeStruct ? nModeFluid : nModeStruct; // get fewer mode
 
-        TimeSeq = (real *)malloc(100000 * sizeof(real));
+        TimeSeq = (real *)malloc(100000 * sizeof(real)); // allocate memories
         memset(TimeSeq, 0, 100000 * sizeof(real));
         modeForce = (real *)malloc(100000 * nModeFluid * sizeof(real));
         memset(modeForce, 0, 100000 * nModeFluid * sizeof(real));
-        modeDisp = (real *)malloc(100000 * N_DOF_PER_NODE * nModeFluid * sizeof(real));
-        memset(modeDisp, 0, 100000 * N_DOF_PER_NODE * nModeFluid * sizeof(real));
+        modeDisp = (real *)malloc(100000 * nModeFluid * 3 * sizeof(real));
+        memset(modeDisp, 0, 100000 * nModeFluid * 3 * sizeof(real));
         initVelocity = (real *)malloc(nModeFluid * sizeof(real));
         memset(initVelocity, 0, nModeFluid * sizeof(real));
 
-        free(nodeCoorDisp);
+        initVelocity[0] = 0.021;
+        initVelocity[1] = 0.129;
+        initVelocity[2] = 0.354;
+        initVelocity[3] = 0.672;
+
+        free(nodeCoorDisp); // clear memory
     }
     else
         Message("UDF[Host]: Error: %d\n", fileStatus);
@@ -148,8 +152,8 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
     // calculate modal force on structure
     if (nModeStruct > 0)
     {
-        memset(modeForceStruct, 0, nModeStruct * sizeof(real));
-        get_struct_mode_force(modeForceStruct);
+        memset(modeForceStruct, 0, nModeStruct * sizeof(real)); // reset struct mode force
+        get_struct_mode_force(modeForceStruct);                 // get struct mode force
         Message("UDF[Host]: Structure mode forces are:");
         for (int i = 0; i < nModeStruct; i++)
             Message("%5.1e, ", modeForceStruct[i]);
@@ -165,7 +169,7 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
 #endif
 
     PRF_GRSUM(modeForceThisTime, nModeFluid, modeForceBuff); // global summation fo modal force this time
-    node_to_host_real(modeForceThisTime, nModeFluid);
+    node_to_host_real(modeForceThisTime, nModeFluid);        // send mode force to host process
 
 #if !RP_NODE
     Message("UDF[Host]: time step is %d, iteration is %d, modal F are ", iTime, iIter);
@@ -173,27 +177,24 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
         Message("%5.1e ", modeForceThisTime[i]);
     Message("\n");
 
-    // for (int i = 0; i < nModeFewer; i++)
-    // {
-    //     Message("i = %d\n", i);
-    //     modeForceThisTime[i] += modeForceStruct[i];
-    // }
+    for (int i = 0; i < nModeFewer; i++) // add struct force
+        modeForceThisTime[i] += modeForceStruct[i];
 
     Message("UDF[Host]: time step is %d, iteration is %d, modal F are ", iTime, iIter);
     for (int i = 0; i < nModeFluid; i++)
         Message("%5.1e ", modeForceThisTime[i]);
     Message("\n");
-    wilson_theta(modeForceThisTime, modeDispThisTime, dTime);
+    wilson_theta(modeForceThisTime, modeDispThisTime, dTime); // wilson theta method
     Message("UDF[Host]: time step is %d, iteration is %d, modal D are ", iTime, iIter);
-    for (int i = 0; i < 9; i++)
+    for (int i = 0; i < nModeFluid * 3; i++)
         Message("%5.1e ", modeDispThisTime[i]);
     Message("\n");
 #endif
 
     host_to_node_real(modeDispThisTime, N_DOF_PER_NODE * nModeFluid); // broadcast modal displacement to node process
 
-#if !RP_HOST // run on node process
-    move_grid(modeDispThisTime, pDomain);
+#if !RP_HOST                              // run on node process
+    move_grid(modeDispThisTime, pDomain); // move grid
 #endif
 
     iIter++;
@@ -239,18 +240,18 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
     for (int i = 0; i < nModeFluid; i++)
     {
         fprintf(fpOutput, "%20.10e,%20.10e,%20.10e,",
-                modeDisp[iTime * nModeFluid * N_DOF_PER_NODE + i * nModeFluid + 0],
-                modeDisp[iTime * nModeFluid * N_DOF_PER_NODE + i * nModeFluid + 1],
-                modeDisp[iTime * nModeFluid * N_DOF_PER_NODE + i * nModeFluid + 2]);
+                modeDisp[iTime * nModeFluid * 3 + i * 3 + 0],
+                modeDisp[iTime * nModeFluid * 3 + i * 3 + 1],
+                modeDisp[iTime * nModeFluid * 3 + i * 3 + 2]);
     }
     fprintf(fpOutput, "\n");
     fclose(fpOutput);
 #endif
 
-    PRF_GSYNC();
-    iIter = 1;
-    iTime++;
-    TimeSeq[iTime] = CURRENT_TIME;
+    PRF_GSYNC();                   // synchronise
+    iIter = 1;                     // reset index for iteration
+    iTime++;                       // index for time +1
+    TimeSeq[iTime] = CURRENT_TIME; // record time
 }
 
 /**
