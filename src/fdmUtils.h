@@ -2,8 +2,8 @@
  * @file fdmUtils.h
  * @author Special (special.xuan@outlook.com)
  * @brief
- * @version 1.2.1
- * @date 2023-12-30
+ * @version 1.2.2
+ * @date 2024-04-15
  *
  * @copyright Copyright (c) 2023
  *
@@ -13,16 +13,19 @@
 #include <time.h>
 #include <udf.h> // note: move udf.h to the last
 
+// debug
+#define DEBUG_FDM
+
 // node match tolerance
 #define NODE_MATCH_TOLERANCE 4e-7
 
-// number of dof per node
-#if RP_3D
-#define N_DOF_PER_NODE 3
-#endif
-#if RP_2D
-#define N_DOF_PER_NODE 2
-#endif
+// // number of dof per node
+// #if RP_3D
+// #define ND_ND 3
+// #endif
+// #if RP_2D
+// #define ND_ND 2
+// #endif
 
 static int iIter = 1; // record the number of the iteration steps
 static int iTime = 0; // record the number of the time steps
@@ -61,6 +64,33 @@ int cmp_node(const void *const a, const void *const b)
     int zCmp = *(da + 2) - *(db + 2) < -NODE_MATCH_TOLERANCE ? -1 : *(da + 2) - *(db + 2) > NODE_MATCH_TOLERANCE ? 1 : 0; // compare z
     return xCmp ? xCmp : yCmp ? yCmp : zCmp ? zCmp : 0; // if x, then y, then z, then equal
 }
+
+#ifdef DEBUG_FDM
+int debug_file_print(const char *const debugMessage)
+{
+    static int debugFilePrintCount = 0;
+    
+    char debugFileName[30] = {0};                    // output file name
+    if I_AM_NODE_HOST_P
+        sprintf(debugFileName, "debug/debugHost.csv");
+    else
+        sprintf(debugFileName, "debug/debugNode%d.csv", myid); // output file name of each node process
+    FILE *fpDebug = fopen(debugFileName, "a");      // open output file in write mode
+
+    if (debugFilePrintCount == 0)
+    {
+        time_t timep;
+        time(&timep);
+        fprintf(fpDebug, "Calculation starts with %d processors, at %s", compute_node_count, asctime(gmtime(&timep)));
+    }
+
+    fprintf(fpDebug, "%s", debugMessage);
+    
+    fclose(fpDebug);
+    debugFilePrintCount++;
+    return 0;
+}
+#endif
 
 #if !RP_NODE
 /**
@@ -122,9 +152,9 @@ int read_struct_coor_mode(double *const structModeDisp,
 
     fgets(line_buf, 256, fpInput); // ignore first line
     for (int i = 0; i < row; i++)  // fill the array of node coordinates and modal displacements
-        if (fscanf(fpInput, "%lf,", structModeDisp + i * column + (iMode - 1) * N_DOF_PER_NODE + 0) <= 0 ||
-            fscanf(fpInput, "%lf,", structModeDisp + i * column + (iMode - 1) * N_DOF_PER_NODE + 1) <= 0 ||
-            fscanf(fpInput, "%lf,", structModeDisp + i * column + (iMode - 1) * N_DOF_PER_NODE + 2) <= 0) // data missing, print error
+        if (fscanf(fpInput, "%lf,", structModeDisp + i * column + (iMode - 1) * ND_ND + 0) <= 0 ||
+            fscanf(fpInput, "%lf,", structModeDisp + i * column + (iMode - 1) * ND_ND + 1) <= 0 ||
+            fscanf(fpInput, "%lf,", structModeDisp + i * column + (iMode - 1) * ND_ND + 2) <= 0) // data missing, print error
         {
             Message("UDF[Host]: Error: Lack of variables in Mode %d, Node %d.\n", iMode, i);
             fclose(fpInput);
@@ -250,7 +280,7 @@ int read_fluid_nodes_modes()
  */
 int read_fluid_coor_mode(double *const nodeCoorDisp, real *const modeFreq, const int iMode)
 {
-    const int row = nNodeFluid, column = (nModeFluid + 1) * N_DOF_PER_NODE;
+    const int row = nNodeFluid, column = (nModeFluid + 1) * ND_ND;
     char inFileName[20] = {0}, line_buf[256] = {0}; // input file name, ignore first line
     if (iMode == 0)
         sprintf(inFileName, "mode/FluidNodeCoor.csv"); // read coordinate at first time
@@ -269,9 +299,9 @@ int read_fluid_coor_mode(double *const nodeCoorDisp, real *const modeFreq, const
 
     fgets(line_buf, 256, fpInput); // ignore first line
     for (int i = 0; i < row; i++)  // fill the array of node coordinates and modal displacements
-        if (fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * N_DOF_PER_NODE + 0) <= 0 ||
-            fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * N_DOF_PER_NODE + 1) <= 0 ||
-            fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * N_DOF_PER_NODE + 2) <= 0) // data missing, print error
+        if (fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * ND_ND + 0) <= 0 ||
+            fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * ND_ND + 1) <= 0 ||
+            fscanf(fpInput, "%lf,", nodeCoorDisp + i * column + iMode * ND_ND + 2) <= 0) // data missing, print error
         {
             Message("UDF[Host]: Error: Lack of variables in Mode %d, Node %d.\n", iMode, i);
             fclose(fpInput);
@@ -307,7 +337,7 @@ int get_struct_mode_force(real *const modeForceStruct)
     {
         for (int iNode = 0; iNode < nNodeStruct; iNode++)
         {
-            int M = iNode * nModeStruct * N_DOF_PER_NODE + iMode * N_DOF_PER_NODE, N = iNode * N_DOF_PER_NODE; // indices
+            int M = iNode * nModeStruct * ND_ND + iMode * ND_ND, N = iNode * ND_ND; // indices
             // if (iMode == nModeStruct -1 && iNode == nNodeStruct - 1)
             //     Message("M = %d, N = %d\n", M, N);
 
@@ -404,9 +434,9 @@ int fill_modal_disp(const double *const nodeCoorDisp)
     Thread *pThread; // pointer of thread
     Node *pNode;     // pointer of node
 
-    const int row = nNodeFluid, column = (nModeFluid + 1) * N_DOF_PER_NODE;
-    int iNode = 0, nodeCount = 0, UDMIColumn = column - N_DOF_PER_NODE; // node index, total number of node, columns of UDMI
-    double node_coor[N_DOF_PER_NODE] = {0}, *thisNode = NULL;           // buffer of node coordinate, pointer of this node
+    const int row = nNodeFluid, column = (nModeFluid + 1) * ND_ND;
+    int iNode = 0, nodeCount = 0, UDMIColumn = column - ND_ND; // node index, total number of node, columns of UDMI
+    double node_coor[ND_ND] = {0}, *thisNode = NULL;           // buffer of node coordinate, pointer of this node
 
     char outFileName[30] = {0};                          // output file name
     sprintf(outFileName, "FluidOutputNode%d.csv", myid); // output file name of each node process
@@ -443,7 +473,7 @@ int fill_modal_disp(const double *const nodeCoorDisp)
                     if (thisNode != NULL)                    // if this node found
                         for (int i = 0; i < UDMIColumn; i++) // fill UDMI with modal displacement
                         {
-                            N_UDMI(pNode, i) = thisNode[i + N_DOF_PER_NODE];
+                            N_UDMI(pNode, i) = thisNode[i + ND_ND];
                             fprintf(fpOutput, "%f,", N_UDMI(pNode, i)); // if this node not found, output error in file
                         }
                     else
@@ -478,45 +508,47 @@ int get_fluid_mode_force(real *const modeForceThisTime, Domain *const pDomain)
     Thread *pThread = Lookup_Thread(pDomain, idFSI);  // pointer of thread
     face_t pFace;                                     // pointer of face
     Node *pNode;                                      // pointer of node
-    real AreaVector[N_DOF_PER_NODE] = {0}, Press = 0; // normal vector of area, pressure
+    real AreaVector[ND_ND] = {0}, Press = 0; // normal vector of area, pressure
     int nNodePerFace = 0, iNode = 0;                  // number of node per face, node index
     static int modeForceCount = 0;                    // modal force counter
 
+#ifdef DEBUG_FDM
+    real AreaCentroid[ND_ND] = {0};
+    char debugMessage[200] = {0};
+#endif
+
     begin_f_loop(pFace, pThread) // begin face loop
+    if PRINCIPAL_FACE_P(pFace, pThread)
     {
         F_AREA(AreaVector, pFace, pThread);      // get normal vector
         Press = F_P(pFace, pThread);             // get pressure
         nNodePerFace = F_NNODES(pFace, pThread); // get number of nodes per face
-        f_node_loop(pFace, pThread, iNode)       // begin node loop
+#ifdef DEBUG_FDM
+        if (iTime == 2 && iIter == 1)
         {
-            if (PRINCIPAL_FACE_P(pFace, pThread)) // if face belong to this process
+            F_Centroid(AreaCentroid, pFace, pThread);
+            sprintf(debugMessage, "%5d, %20.10e, %20.10e, %20.10e, %20.10e, %20.10e, %20.10e, %20.10e, %5d,\n",
+                    pFace,
+                    AreaCentroid[0], AreaCentroid[1], AreaCentroid[2],
+                    AreaVector[0], AreaVector[1], AreaVector[2],
+                    Press, nNodePerFace);
+            debug_file_print(debugMessage);
+        }
+#endif
+        f_node_loop(pFace, pThread, iNode) // begin node loop
+        {
+            pNode = F_NODE(pFace, pThread, iNode); // get this node
+            for (int i = 0; i < nModeFluid; i++) // for each mode
             {
-                pNode = F_NODE(pFace, pThread, iNode); // get this node
-                // if(myid == 0 && modeForceCount > 49 && modeForceCount % 50 == 0)
-                //     Message("UDF[Node]: Modal Force: ");
-                for (int i = 0; i < nModeFluid; i++) // for each mode
-                {
-                    modeForceThisTime[i] += 1 / (double)nNodePerFace * Press * (// modal force is summation of pressure times normal vector times modal displacement
-                                            AreaVector[0] * N_UDMI(pNode, i * N_DOF_PER_NODE + 0) + 
-                                            AreaVector[1] * N_UDMI(pNode, i * N_DOF_PER_NODE + 1) + 
-                                            AreaVector[2] * N_UDMI(pNode, i * N_DOF_PER_NODE + 2));
-                    // if (myid == 0 && modeForceCount > 49 && modeForceCount % 50 == 0)
-                    //     Message("%5.1e, ", modeForceThisTime[i]);
-                }
-                // if(myid == 0 && modeForceCount > 49 && modeForceCount % 50 == 0)
-                //     Message("%5.1e, %5.1e, %5d",AreaVector[0], Press, nNodePerFace);
-                // if (myid == 0 && modeForceCount > 49 && modeForceCount % 50 == 0)
-                //     Message("\n");
-                modeForceCount++; // modal force counter +1
+                modeForceThisTime[i] += 1 / (double)nNodePerFace * Press * (// modal force is summation of pressure times normal vector times modal displacement
+                                        AreaVector[0] * N_UDMI(pNode, i * ND_ND + 0) + 
+                                        AreaVector[1] * N_UDMI(pNode, i * ND_ND + 1) + 
+                                        AreaVector[2] * N_UDMI(pNode, i * ND_ND + 2));
             }
+            modeForceCount++; // modal force counter +1
         }
     }
     end_f_loop(pFace, pThread); // end face loop
-
-    // Message("UDF[Node][%d]: ", myid);
-    // for (int i = 0; i < nModeFluid; i++)
-    //     Message("%5.1e, ", modeForceThisTime[i]);
-    // Message("\n");
 
     return 0;
 }
@@ -538,13 +570,9 @@ int move_grid(const real *const modeDispThisTime,
     Thread *pThread = Lookup_Thread(pDomain, idFluid);                                         // pointer of thread
     cell_t pCell;                                                                              // pointer of cell
     Node *pNode;                                                                               // pointer of node
-    real dispUpdate[N_DOF_PER_NODE] = {0}, deltaDisp = 0;                                      // update displacement, displacement gap
+    real dispUpdate[ND_ND] = {0}, deltaDisp = 0;                                      // update displacement, displacement gap
     int iNode = 0;                                                                             // node index
-    const real *const modeDispLastTime = modeDisp + (iTime - 1) * nModeFluid * N_DOF_PER_NODE; // modal displacement last time
-    // Message("\nUDF[Node][%d]: time step is %d, iteration is %d modal displacement are ", myid, iTime, iIter);
-    // for (int i = 0; i < 9; i++)
-    //     Message("%5.1e ", modeDispThisTime[i]);
-    // Message("\n");
+    const real *const modeDispLastTime = modeDisp + (iTime - 1) * nModeFluid * ND_ND; // modal displacement last time
 
     begin_c_loop_int_ext(pCell, pThread) // begin all cell loop
     {
@@ -553,19 +581,16 @@ int move_grid(const real *const modeDispThisTime,
             pNode = C_NODE(pCell, pThread, iNode); // get node pointer
             if (NODE_POS_NEED_UPDATE(pNode))       // if node not yet updated
             {
-                memset(dispUpdate, 0, N_DOF_PER_NODE * sizeof(real)); // clear update displacement
+                memset(dispUpdate, 0, ND_ND * sizeof(real)); // clear update displacement
                 for (int i = 0; i < nModeFluid; i++)
                 {
-                    deltaDisp = modeDispThisTime[N_DOF_PER_NODE * i] - modeDispLastTime[N_DOF_PER_NODE * i]; // displacement gap
-                    dispUpdate[0] += deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 0);                      // update displacement is summation of displacement gap times each modal displacement
-                    dispUpdate[1] += deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 1);
-                    dispUpdate[2] += deltaDisp * N_UDMI(pNode, i * N_DOF_PER_NODE + 2);
+                    deltaDisp = modeDispThisTime[ND_ND * i] - modeDispLastTime[ND_ND * i]; // displacement gap
+                    dispUpdate[0] += deltaDisp * N_UDMI(pNode, i * ND_ND + 0);                      // update displacement is summation of displacement gap times each modal displacement
+                    dispUpdate[1] += deltaDisp * N_UDMI(pNode, i * ND_ND + 1);
+                    dispUpdate[2] += deltaDisp * N_UDMI(pNode, i * ND_ND + 2);
                 }
                 NV_V(NODE_COORD(pNode), +=, dispUpdate); // update node
                 NODE_POS_UPDATED(pNode);                 // indicate node updated
-                // real x = NODE_X(pNode), y = NODE_Y(pNode), z = NODE_Z(pNode);
-                // if (x >= 0.49 && x <= 0.51 && y >= 0.18 && y <=0.22 && z == 0)
-                //     Message("UDF[Node][%d]: %5.1e + %5.1e, %5.1e + %5.1e, %5.1e + %5.1e\n", myid, x, dispUpdate[0], y, dispUpdate[1], z, dispUpdate[2]);
             }
         }
     }

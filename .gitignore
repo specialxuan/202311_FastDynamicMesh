@@ -1,5 +1,8 @@
 .vscode/*
+animation/*
 build/*
+data/*
+debug/*
 exe/*
 Fluent/*
 libudf/*
@@ -12,9 +15,7 @@ mode/Mode*
 *.tmp
 *.flprj
 *.csv
-cleanup*
-*.jou
-animation/*
-animation*
-data/*
 *.zip
+*.jou
+cleanup*
+animation*
