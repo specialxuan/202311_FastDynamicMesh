@@ -69,7 +69,6 @@ int cmp_node(const void *const a, const void *const b)
 int debug_file_print(const char *const debugMessage)
 {
     static int debugFilePrintCount = 0;
-    
     char debugFileName[30] = {0};                    // output file name
     if I_AM_NODE_HOST_P
         sprintf(debugFileName, "debug/debugHost.csv");
@@ -83,9 +82,7 @@ int debug_file_print(const char *const debugMessage)
         time(&timep);
         fprintf(fpDebug, "Calculation starts with %d processors, at %s", compute_node_count, asctime(gmtime(&timep)));
     }
-
     fprintf(fpDebug, "%s", debugMessage);
-    
     fclose(fpDebug);
     debugFilePrintCount++;
     return 0;
@@ -505,31 +502,36 @@ int fill_modal_disp(const double *const nodeCoorDisp)
  */
 int get_fluid_mode_force(real *const modeForceThisTime, Domain *const pDomain)
 {
-    Thread *pThread = Lookup_Thread(pDomain, idFSI);  // pointer of thread
-    face_t pFace;                                     // pointer of face
-    Node *pNode;                                      // pointer of node
-    real AreaVector[ND_ND] = {0}, Press = 0; // normal vector of area, pressure
-    int nNodePerFace = 0, iNode = 0;                  // number of node per face, node index
-    static int modeForceCount = 0;                    // modal force counter
+    Thread *pThread = Lookup_Thread(pDomain, idFSI); // pointer of thread
+    face_t pFace;                                    // pointer of face
+    Node *pNode;                                     // pointer of node
+    real NV_VEC(AreaVector) = {0},                   // normal vector of area
+        NV_VEC(ForceVector) = {0},                   // pressure vector
+        NV_VEC(ShearVector) = {0},                   // Shear vector
+        Press = 0;                                   // pressure
+    int nNodePerFace = 0, iNode = 0;                 // number of node per face, node index
+    static int modeForceCount = 0;                   // modal force counter
 
 #ifdef DEBUG_FDM
-    real AreaCentroid[ND_ND] = {0};
+    real NV_VEC(AreaCentroid) = {0};
     char debugMessage[200] = {0};
 #endif
 
     begin_f_loop(pFace, pThread) // begin face loop
     if PRINCIPAL_FACE_P(pFace, pThread)
     {
-        F_AREA(AreaVector, pFace, pThread);      // get normal vector
-        Press = F_P(pFace, pThread);             // get pressure
-        nNodePerFace = F_NNODES(pFace, pThread); // get number of nodes per face
+        nNodePerFace = F_NNODES(pFace, pThread);                                       // get number of nodes per face
+        F_AREA(AreaVector, pFace, pThread);                                            // get normal vector
+        Press = F_P(pFace, pThread);                                                   // get pressure
+        // NV_VS(ShearVector, =, F_STORAGE_R_NV(pFace, pThread, SV_WALL_SHEAR), *, -1.0); // get shear vector
+        NV_VVS(ForceVector, =, ShearVector, +, AreaVector, *, Press);                  // calculate pressure vector
 #ifdef DEBUG_FDM
         if (iTime == 2 && iIter == 1)
         {
             F_Centroid(AreaCentroid, pFace, pThread);
             sprintf(debugMessage, "%5d, %20.10e, %20.10e, %20.10e, %20.10e, %20.10e, %20.10e, %20.10e, %5d,\n",
                     pFace,
-                    AreaCentroid[0], AreaCentroid[1], AreaCentroid[2],
+                    ForceVector[0], ForceVector[1], ForceVector[2],
                     AreaVector[0], AreaVector[1], AreaVector[2],
                     Press, nNodePerFace);
             debug_file_print(debugMessage);
@@ -540,10 +542,11 @@ int get_fluid_mode_force(real *const modeForceThisTime, Domain *const pDomain)
             pNode = F_NODE(pFace, pThread, iNode); // get this node
             for (int i = 0; i < nModeFluid; i++) // for each mode
             {
-                modeForceThisTime[i] += 1 / (double)nNodePerFace * Press * (// modal force is summation of pressure times normal vector times modal displacement
-                                        AreaVector[0] * N_UDMI(pNode, i * ND_ND + 0) + 
-                                        AreaVector[1] * N_UDMI(pNode, i * ND_ND + 1) + 
-                                        AreaVector[2] * N_UDMI(pNode, i * ND_ND + 2));
+                // for (int i = 0; i < ND_ND; i++)
+                //     modeForceThisTime[i] += 1 / (double)nNodePerFace * ForceVector[i] * N_UDMI(pNode, i * ND_ND + i);
+
+                modeForceThisTime[i] += 1 / (double)nNodePerFace * Press * ( // modal force is summation of pressure times normal vector times modal displacement
+                AreaVector[0] * N_UDMI(pNode, i * ND_ND + 0) + AreaVector[1] * N_UDMI(pNode, i * ND_ND + 1) + AreaVector[2] * N_UDMI(pNode, i * ND_ND + 2));
             }
             modeForceCount++; // modal force counter +1
         }

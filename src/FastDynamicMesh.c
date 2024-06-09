@@ -44,7 +44,7 @@ DEFINE_ON_DEMAND(Preprocess)
 #if !RP_NODE                                           // run in host process
     if ((fileStatus = read_struct_nodes_modes()) == 0) // input number of nodes and modes in structure
     {
-        int row = nNodeStruct, column = nModeStruct * ND_ND;                        // size of structure modal displacement matrix
+        int row = nNodeStruct, column = nModeStruct * ND_ND;                                 // size of structure modal displacement matrix
         Message("UDF[Host]: Structure: r = %d, c = %d, m = %d\n", row, column, nModeStruct); // print size of structure modal displacement and number of modes
 
         structModeDisp = (double *)malloc(row * column * sizeof(double)); // allocate memories
@@ -77,7 +77,7 @@ DEFINE_ON_DEMAND(Preprocess)
     host_to_node_int_1(fileStatus); // broadcast file status to all node process
     if (fileStatus == 0)            // if no error
     {
-        host_to_node_int_2(nNodeFluid, nModeFluid);                       // broadcast size to all node process
+        host_to_node_int_2(nNodeFluid, nModeFluid);              // broadcast size to all node process
         int row = nNodeFluid, column = (nModeFluid + 1) * ND_ND; // number of modes
 
         double *nodeCoorDisp = NULL;                                    // node coordinates and modal displacements
@@ -146,7 +146,7 @@ DEFINE_EXECUTE_AFTER_DATA(AutoPreprocess, libudf)
 #if !RP_NODE                                           // run in host process
     if ((fileStatus = read_struct_nodes_modes()) == 0) // input number of nodes and modes in structure
     {
-        int row = nNodeStruct, column = nModeStruct * ND_ND;                        // size of structure modal displacement matrix
+        int row = nNodeStruct, column = nModeStruct * ND_ND;                                 // size of structure modal displacement matrix
         Message("UDF[Host]: Structure: r = %d, c = %d, m = %d\n", row, column, nModeStruct); // print size of structure modal displacement and number of modes
 
         structModeDisp = (double *)malloc(row * column * sizeof(double)); // allocate memories
@@ -179,7 +179,7 @@ DEFINE_EXECUTE_AFTER_DATA(AutoPreprocess, libudf)
     host_to_node_int_1(fileStatus); // broadcast file status to all node process
     if (fileStatus == 0)            // if no error
     {
-        host_to_node_int_2(nNodeFluid, nModeFluid);                       // broadcast size to all node process
+        host_to_node_int_2(nNodeFluid, nModeFluid);              // broadcast size to all node process
         int row = nNodeFluid, column = (nModeFluid + 1) * ND_ND; // number of modes
 
         double *nodeCoorDisp = NULL;                                    // node coordinates and modal displacements
@@ -237,9 +237,9 @@ DEFINE_EXECUTE_AFTER_DATA(AutoPreprocess, libudf)
  */
 DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
 {
-    real *const modeDispThisTime = modeDisp + iTime * nModeFluid * ND_ND;             // modal displacement this time, buffer
+    real *const modeDispThisTime = modeDisp + iTime * nModeFluid * ND_ND;                      // modal displacement this time, buffer
     real *const modeForceThisTime = modeForce + iTime * nModeFluid, modeForceBuff[nModeFluid]; // modal force this time, buffer
-    memset(modeDispThisTime, 0, nModeFluid * ND_ND * sizeof(real));                   // allocate memory
+    memset(modeDispThisTime, 0, nModeFluid * ND_ND * sizeof(real));                            // allocate memory
     memset(modeForceThisTime, 0, nModeFluid * sizeof(real));
     memset(modeForceBuff, 0, nModeFluid * sizeof(real));
 
