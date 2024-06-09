@@ -1,0 +1,134 @@
+
+! output fluid node coordinate and displacement
+/prep7
+*set, all, , ! clear all parameters
+
+/post1
+CMSEL,S,fluiddomain
+*GET,N_Node,node,0,count,,, ! get the number of nodes
+*GET,L_Node,node,0,num,min,,
+*GET,H_Node,node,0,num,max,,
+*get, N_Modes, active, 0, set, nset ! get the number of sets
+
+*dim, NodeCoorDisp, table, N_Node, 3 ! define a table to store data
+NodeCoorDisp(0,0) = 0
+NodeCoorDisp(0,1) = N_Node
+NodeCoorDisp(0,2) = N_Modes
+
+*DO,i_Node,L_Node,H_Node
+*GET,N_X,NODE,i_Node,LOC,X
+*GET,N_Y,NODE,i_Node,LOC,Y
+*GET,N_Z,NODE,i_Node,LOC,Z
+NodeCoorDisp(i_Node-L_Node+1, 0) = N_X
+NodeCoorDisp(i_Node-L_Node+1, 1) = N_Y
+NodeCoorDisp(i_Node-L_Node+1, 2) = N_Z
+*ENDDO
+
+*cfopen, FluidNodeCoor, csv
+*vwrite, NodeCoorDisp(0, 0), NodeCoorDisp(0, 1), NodeCoorDisp(0, 2)
+(F20.10, ",", F20.10, ",", F20.10, ",")
+*CFCLOS
+
+*set, i_SET, 1
+set, first ! read the first data set
+*GET,F_Mode,MODE,i_SET,FREQ,,,
+NodeCoorDisp(0,0) = F_Mode
+*DO,i_Node,L_Node,H_Node
+*GET,N_UX,NODE,i_Node,U,X
+*GET,N_UY,NODE,i_Node,U,Y
+*GET,N_UZ,NODE,i_Node,U,Z
+NodeCoorDisp(i_Node-L_Node+1, 0) = N_UX
+NodeCoorDisp(i_Node-L_Node+1, 1) = N_UY
+NodeCoorDisp(i_Node-L_Node+1, 2) = N_UZ
+*ENDDO
+
+*cfopen, FluidNodeDisp%i_SET%, csv
+*vwrite, NodeCoorDisp(0, 0), NodeCoorDisp(0, 1), NodeCoorDisp(0, 2)
+(E20.10, ",", E20.10, ",", E20.10, ",")
+*CFCLOS
+
+*DO,i_SET,2,N_Modes
+SET, next
+*GET,F_Mode,MODE,i_SET,FREQ,,,
+NodeCoorDisp(0,0) = F_Mode
+*DO,i_Node,L_Node,H_Node
+*GET,N_UX,NODE,i_Node,U,X
+*GET,N_UY,NODE,i_Node,U,Y
+*GET,N_UZ,NODE,i_Node,U,Z
+NodeCoorDisp(i_Node-L_Node+1, 0) = N_UX
+NodeCoorDisp(i_Node-L_Node+1, 1) = N_UY
+NodeCoorDisp(i_Node-L_Node+1, 2) = N_UZ
+*ENDDO
+
+*cfopen, FluidNodeDisp%i_SET%, csv
+*vwrite, NodeCoorDisp(0, 0), NodeCoorDisp(0, 1), NodeCoorDisp(0, 2)
+(E20.10, ",", E20.10, ",", E20.10, ",")
+*CFCLOS
+*ENDDO
+
+! output structure node coordinate and displacement
+/prep7
+*set, all, , ! clear all parameters
+
+/post1
+CMSEL,S,solid
+*GET,N_Node,node,0,count,,, ! get the number of nodes
+*GET,L_Node,node,0,num,min,,
+*GET,H_Node,node,0,num,max,,
+*get, N_Modes, active, 0, set, nset ! get the number of sets
+
+*dim, NodeCoorDisp, table, N_Node, 3 ! define a table to store data
+NodeCoorDisp(0,0) = 0
+NodeCoorDisp(0,1) = N_Node
+NodeCoorDisp(0,2) = N_Modes
+
+*DO,i_Node,L_Node,H_Node
+*GET,N_X,NODE,i_Node,LOC,X
+*GET,N_Y,NODE,i_Node,LOC,Y
+*GET,N_Z,NODE,i_Node,LOC,Z
+NodeCoorDisp(i_Node-L_Node+1, 0) = N_X
+NodeCoorDisp(i_Node-L_Node+1, 1) = N_Y
+NodeCoorDisp(i_Node-L_Node+1, 2) = N_Z
+*ENDDO
+
+*cfopen, StructNodeCoor, csv
+*vwrite, NodeCoorDisp(0, 0), NodeCoorDisp(0, 1), NodeCoorDisp(0, 2)
+(F20.10, ",", F20.10, ",", F20.10, ",")
+*CFCLOS
+
+*set, i_SET, 1
+set, first ! read the first data set
+*GET,F_Mode,MODE,i_SET,FREQ,,,
+NodeCoorDisp(0,0) = F_Mode
+*DO,i_Node,L_Node,H_Node
+*GET,N_UX,NODE,i_Node,U,X
+*GET,N_UY,NODE,i_Node,U,Y
+*GET,N_UZ,NODE,i_Node,U,Z
+NodeCoorDisp(i_Node-L_Node+1, 0) = N_UX
+NodeCoorDisp(i_Node-L_Node+1, 1) = N_UY
+NodeCoorDisp(i_Node-L_Node+1, 2) = N_UZ
+*ENDDO
+
+*cfopen, StructNodeDisp%i_SET%, csv
+*vwrite, NodeCoorDisp(0, 0), NodeCoorDisp(0, 1), NodeCoorDisp(0, 2)
+(E20.10, ",", E20.10, ",", E20.10, ",")
+*CFCLOS
+
+*DO,i_SET,2,N_Modes
+SET, next
+*GET,F_Mode,MODE,i_SET,FREQ,,,
+NodeCoorDisp(0,0) = F_Mode
+*DO,i_Node,L_Node,H_Node
+*GET,N_UX,NODE,i_Node,U,X
+*GET,N_UY,NODE,i_Node,U,Y
+*GET,N_UZ,NODE,i_Node,U,Z
+NodeCoorDisp(i_Node-L_Node+1, 0) = N_UX
+NodeCoorDisp(i_Node-L_Node+1, 1) = N_UY
+NodeCoorDisp(i_Node-L_Node+1, 2) = N_UZ
+*ENDDO
+
+*cfopen, StructNodeDisp%i_SET%, csv
+*vwrite, NodeCoorDisp(0, 0), NodeCoorDisp(0, 1), NodeCoorDisp(0, 2)
+(E20.10, ",", E20.10, ",", E20.10, ",")
+*CFCLOS
+*ENDDO

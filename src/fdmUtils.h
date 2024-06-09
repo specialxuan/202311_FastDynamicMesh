@@ -46,8 +46,8 @@ static real *modeForceStruct = NULL;  // modal force
 static real *modeDisp = NULL;         // modal-displacement,modal-velocity,acceleration repeat
 static real *initVelocity = NULL;     // initial modal velocity
 
-static int idFSI = 23;   // record the id of the fsi faces, shown in fluent
-static int idFluid = 14; // record the id of the fluid cell zone, shown in fluent
+static int idFSI = 19;   // record the id of the fsi faces, shown in fluent
+static int idFluid = 11; // record the id of the fluid cell zone, shown in fluent
 
 /**
  * @brief compare nodes in order of x, y, z

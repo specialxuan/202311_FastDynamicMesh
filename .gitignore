@@ -6,7 +6,7 @@ debug/*
 exe/*
 Fluent/*
 libudf/*
-mode/Mode*
+mode/Mode.*
 杂项/*
 *.log
 *.trn

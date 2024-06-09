@@ -118,10 +118,11 @@ DEFINE_ON_DEMAND(Preprocess)
         initVelocity = (real *)malloc(nModeFluid * sizeof(real));
         memset(initVelocity, 0, nModeFluid * sizeof(real));
 
-        initVelocity[0] = 0.021;
-        initVelocity[1] = 0.129;
-        initVelocity[2] = 0.354;
-        initVelocity[3] = 0.672;
+        initVelocity[0] = 0;
+        initVelocity[1] = 0;
+        initVelocity[2] = 0;
+        initVelocity[3] = 0;
+        initVelocity[4] = 0;
 
         free(nodeCoorDisp); // clear memory
     }
@@ -220,10 +221,11 @@ DEFINE_EXECUTE_AFTER_DATA(AutoPreprocess, libudf)
         initVelocity = (real *)malloc(nModeFluid * sizeof(real));
         memset(initVelocity, 0, nModeFluid * sizeof(real));
 
-        initVelocity[0] = 0.021;
-        initVelocity[1] = 0.129;
-        initVelocity[2] = 0.354;
-        initVelocity[3] = 0.672;
+        initVelocity[0] = 0;
+        initVelocity[1] = 0;
+        initVelocity[2] = 0;
+        initVelocity[3] = 0;
+        initVelocity[4] = 0;
 
         free(nodeCoorDisp); // clear memory
     }
