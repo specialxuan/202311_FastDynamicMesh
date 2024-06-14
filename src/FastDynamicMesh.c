@@ -2,8 +2,8 @@
  * @file FastDynamicMesh.c
  * @author SpecialXuan (special.xuan@outlook.com)
  * @brief
- * @version 1.2.2
- * @date 2024-04-15
+ * @version 1.3.0
+ * @date 2024-06-14
  *
  * @copyright Copyright (c) 2023
  *
@@ -36,15 +36,14 @@ DEFINE_ON_DEMAND(Preprocess)
     iIter = 1; // initialise iteration index
     iTime = 0; // initialise time index
 
-    // RP_Get_Real(char *s)-RP_Get_Real("flow-time")
-    // RP_Set_Float(char *s, double v)-RP_Set_Float("flow-time", 0.2)
     RP_Set_Float("flow-time", 0); // set  flow time
+    free_memories();
 
     int fileStatus = 0;                                // size of node coordinates and modal displacements, number of modes, status of input file(0 is noError, 1 is Missing files, 2 is Missing data
 #if !RP_NODE                                           // run in host process
     if ((fileStatus = read_struct_nodes_modes()) == 0) // input number of nodes and modes in structure
     {
-        int row = nNodeStruct, column = nModeStruct * ND_ND;                        // size of structure modal displacement matrix
+        int row = nNodeStruct, column = nModeStruct * ND_ND;                                 // size of structure modal displacement matrix
         Message("UDF[Host]: Structure: r = %d, c = %d, m = %d\n", row, column, nModeStruct); // print size of structure modal displacement and number of modes
 
         structModeDisp = (double *)malloc(row * column * sizeof(double)); // allocate memories
@@ -55,8 +54,8 @@ DEFINE_ON_DEMAND(Preprocess)
         memset(structDamp, 0, row * ND_ND * sizeof(double));
         structLoad = (double *)malloc(row * ND_ND * sizeof(double));
         memset(structLoad, 0, row * ND_ND * sizeof(double));
-        modeForceStruct = (real *)malloc(nModeStruct * sizeof(real));
-        memset(modeForceStruct, 0, nModeStruct * sizeof(real));
+        structModeForce = (real *)malloc(nModeStruct * sizeof(real));
+        memset(structModeForce, 0, nModeStruct * sizeof(real));
 
         for (int iMode = 0; iMode < nModeStruct; iMode++)                                   // input each modal displacement
             if (fileStatus = read_struct_coor_mode(structModeDisp, row, column, iMode + 1)) // if file or data missing, print error
@@ -71,13 +70,14 @@ DEFINE_ON_DEMAND(Preprocess)
         Message("UDF[Host]: Structure: Error: %d\n", fileStatus); // if no file print error
     }
 
-    fileStatus = read_fluid_nodes_modes(); // input size of node coordinates and modal displacement
+    fileStatus = read_fluid_nodes_modes();                            // input size of node coordinates and modal displacement
+    nModeFewer = nModeFluid < nModeStruct ? nModeFluid : nModeStruct; // get fewer mode
 #endif
 
     host_to_node_int_1(fileStatus); // broadcast file status to all node process
     if (fileStatus == 0)            // if no error
     {
-        host_to_node_int_2(nNodeFluid, nModeFluid);                       // broadcast size to all node process
+        host_to_node_int_2(nNodeFluid, nModeFluid);              // broadcast size to all node process
         int row = nNodeFluid, column = (nModeFluid + 1) * ND_ND; // number of modes
 
         double *nodeCoorDisp = NULL;                                    // node coordinates and modal displacements
@@ -85,6 +85,16 @@ DEFINE_ON_DEMAND(Preprocess)
         memset(nodeCoorDisp, 0, row * column * sizeof(double));         // initialize nodeCoorDisp
         modeFreq = (real *)malloc(nModeFluid * sizeof(real));           // allocate memory for mode frequency
         memset(modeFreq, 0, nModeFluid * sizeof(real));                 // initialize frequency
+        modeForce_ThisTime = (real *)malloc(nModeFluid * sizeof(real));
+        memset(modeForce_ThisTime, 0, nModeFluid * sizeof(real));
+        modeForce_LastTime = (real *)malloc(nModeFluid * sizeof(real));
+        memset(modeForce_LastTime, 0, nModeFluid * sizeof(real));
+        modeDisp_ThisTime = (real *)malloc(nModeFluid * 3 * sizeof(real));
+        memset(modeDisp_ThisTime, 0, nModeFluid * 3 * sizeof(real));
+        modeDisp_LastTime = (real *)malloc(nModeFluid * 3 * sizeof(real));
+        memset(modeDisp_LastTime, 0, nModeFluid * 3 * sizeof(real));
+        initVelocity = (real *)malloc(nModeFluid * sizeof(real));
+        memset(initVelocity, 0, nModeFluid * sizeof(real));
 
 #if !RP_NODE                                                                     // run in host process
         Message("UDF[Host]: r = %d, c = %d, m = %d\n", row, column, nModeFluid); // print size of node coordinates and modal displacement and number of modes
@@ -98,32 +108,17 @@ DEFINE_ON_DEMAND(Preprocess)
             Message("           %f\n", modeFreq[i]);
 
         qsort(nodeCoorDisp, row, column * sizeof(double), cmp_node); // sort by node coordinate
+        read_paramater();
 #endif
 
         host_to_node_double(nodeCoorDisp, row * column); // broadcast node coordinate and modal displacement to all node process
         host_to_node_double(modeFreq, nModeFluid);       // broadcast mode frequency to node process
+        host_to_node_int_2(idFSI, idFluid);
+        host_to_node_real(initVelocity, nModeFluid);
 
 #if !RP_HOST // run in node process
         fill_modal_disp(nodeCoorDisp);
 #endif
-
-        nModeFewer = nModeFluid < nModeStruct ? nModeFluid : nModeStruct; // get fewer mode
-
-        TimeSeq = (real *)malloc(100000 * sizeof(real)); // allocate memories
-        memset(TimeSeq, 0, 100000 * sizeof(real));
-        modeForce = (real *)malloc(100000 * nModeFluid * sizeof(real));
-        memset(modeForce, 0, 100000 * nModeFluid * sizeof(real));
-        modeDisp = (real *)malloc(100000 * nModeFluid * 3 * sizeof(real));
-        memset(modeDisp, 0, 100000 * nModeFluid * 3 * sizeof(real));
-        initVelocity = (real *)malloc(nModeFluid * sizeof(real));
-        memset(initVelocity, 0, nModeFluid * sizeof(real));
-
-        initVelocity[0] = 0;
-        initVelocity[1] = 0;
-        initVelocity[2] = 0;
-        initVelocity[3] = 0;
-        initVelocity[4] = 0;
-
         free(nodeCoorDisp); // clear memory
     }
     else
@@ -136,101 +131,7 @@ DEFINE_ON_DEMAND(Preprocess)
  */
 DEFINE_EXECUTE_AFTER_DATA(AutoPreprocess, libudf)
 {
-    iIter = 1; // initialise iteration index
-    iTime = 0; // initialise time index
-
-    // RP_Get_Real(char *s)-RP_Get_Real("flow-time")
-    // RP_Set_Float(char *s, double v)-RP_Set_Float("flow-time", 0.2)
-    RP_Set_Float("flow-time", 0); // set  flow time
-
-    int fileStatus = 0;                                // size of node coordinates and modal displacements, number of modes, status of input file(0 is noError, 1 is Missing files, 2 is Missing data
-#if !RP_NODE                                           // run in host process
-    if ((fileStatus = read_struct_nodes_modes()) == 0) // input number of nodes and modes in structure
-    {
-        int row = nNodeStruct, column = nModeStruct * ND_ND;                        // size of structure modal displacement matrix
-        Message("UDF[Host]: Structure: r = %d, c = %d, m = %d\n", row, column, nModeStruct); // print size of structure modal displacement and number of modes
-
-        structModeDisp = (double *)malloc(row * column * sizeof(double)); // allocate memories
-        memset(structModeDisp, 0, row * column * sizeof(double));         // initialize
-        structStiff = (double *)malloc(row * ND_ND * sizeof(double));
-        memset(structStiff, 0, row * ND_ND * sizeof(double));
-        structDamp = (double *)malloc(row * ND_ND * sizeof(double));
-        memset(structDamp, 0, row * ND_ND * sizeof(double));
-        structLoad = (double *)malloc(row * ND_ND * sizeof(double));
-        memset(structLoad, 0, row * ND_ND * sizeof(double));
-        modeForceStruct = (real *)malloc(nModeStruct * sizeof(real));
-        memset(modeForceStruct, 0, nModeStruct * sizeof(real));
-
-        for (int iMode = 0; iMode < nModeStruct; iMode++)                                   // input each modal displacement
-            if (fileStatus = read_struct_coor_mode(structModeDisp, row, column, iMode + 1)) // if file or data missing, print error
-                Message("UDF[Host]: Error: Structure: %d in %d\n", fileStatus, iMode);
-
-        if (fileStatus = read_struct_stiff_damp_load(structStiff, structDamp, structLoad, row, ND_ND)) // input stiffness and damping vector
-            Message("UDF[Host]: Error: Structure: %d\n", fileStatus);
-    }
-    else
-    {
-        nModeStruct = nNodeStruct = 0;
-        Message("UDF[Host]: Structure: Error: %d\n", fileStatus); // if no file print error
-    }
-
-    fileStatus = read_fluid_nodes_modes(); // input size of node coordinates and modal displacement
-#endif
-
-    host_to_node_int_1(fileStatus); // broadcast file status to all node process
-    if (fileStatus == 0)            // if no error
-    {
-        host_to_node_int_2(nNodeFluid, nModeFluid);                       // broadcast size to all node process
-        int row = nNodeFluid, column = (nModeFluid + 1) * ND_ND; // number of modes
-
-        double *nodeCoorDisp = NULL;                                    // node coordinates and modal displacements
-        nodeCoorDisp = (double *)malloc(row * column * sizeof(double)); // allocate memory for nodeCoorDisp
-        memset(nodeCoorDisp, 0, row * column * sizeof(double));         // initialize nodeCoorDisp
-        modeFreq = (real *)malloc(nModeFluid * sizeof(real));           // allocate memory for mode frequency
-        memset(modeFreq, 0, nModeFluid * sizeof(real));                 // initialize frequency
-
-#if !RP_NODE                                                                     // run in host process
-        Message("UDF[Host]: r = %d, c = %d, m = %d\n", row, column, nModeFluid); // print size of node coordinates and modal displacement and number of modes
-
-        for (int iMode = 0; iMode < nModeFluid + 1; iMode++)                      // input each modal displacement
-            if (fileStatus = read_fluid_coor_mode(nodeCoorDisp, modeFreq, iMode)) // if file or data missing, print error
-                Message("UDF[Host]: Error: %d in %d\n", fileStatus, iMode);
-
-        Message("UDF[Host]: Mode frequency\n"); // print mode frequency
-        for (int i = 0; i < nModeFluid; i++)
-            Message("           %f\n", modeFreq[i]);
-
-        qsort(nodeCoorDisp, row, column * sizeof(double), cmp_node); // sort by node coordinate
-#endif
-
-        host_to_node_double(nodeCoorDisp, row * column); // broadcast node coordinate and modal displacement to all node process
-        host_to_node_double(modeFreq, nModeFluid);       // broadcast mode frequency to node process
-
-#if !RP_HOST // run in node process
-        fill_modal_disp(nodeCoorDisp);
-#endif
-
-        nModeFewer = nModeFluid < nModeStruct ? nModeFluid : nModeStruct; // get fewer mode
-
-        TimeSeq = (real *)malloc(100000 * sizeof(real)); // allocate memories
-        memset(TimeSeq, 0, 100000 * sizeof(real));
-        modeForce = (real *)malloc(100000 * nModeFluid * sizeof(real));
-        memset(modeForce, 0, 100000 * nModeFluid * sizeof(real));
-        modeDisp = (real *)malloc(100000 * nModeFluid * 3 * sizeof(real));
-        memset(modeDisp, 0, 100000 * nModeFluid * 3 * sizeof(real));
-        initVelocity = (real *)malloc(nModeFluid * sizeof(real));
-        memset(initVelocity, 0, nModeFluid * sizeof(real));
-
-        initVelocity[0] = 0;
-        initVelocity[1] = 0;
-        initVelocity[2] = 0;
-        initVelocity[3] = 0;
-        initVelocity[4] = 0;
-
-        free(nodeCoorDisp); // clear memory
-    }
-    else
-        Message("UDF[Host]: Error: %d\n", fileStatus);
+    Preprocess();
 }
 
 /**
@@ -239,39 +140,39 @@ DEFINE_EXECUTE_AFTER_DATA(AutoPreprocess, libudf)
  */
 DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
 {
-    real *const modeDispThisTime = modeDisp + iTime * nModeFluid * ND_ND;             // modal displacement this time, buffer
-    real *const modeForceThisTime = modeForce + iTime * nModeFluid, modeForceBuff[nModeFluid]; // modal force this time, buffer
-    memset(modeDispThisTime, 0, nModeFluid * ND_ND * sizeof(real));                   // allocate memory
-    memset(modeForceThisTime, 0, nModeFluid * sizeof(real));
+    real modeForceBuff[nModeFluid];                              // modal force this time, buffer
+    memset(modeDisp_ThisTime, 0, nModeFluid * 3 * sizeof(real)); // allocate memory
+    memset(modeForce_ThisTime, 0, nModeFluid * sizeof(real));
     memset(modeForceBuff, 0, nModeFluid * sizeof(real));
 
 #if !RP_NODE
     // calculate modal force on structure
     if (nModeStruct > 0)
     {
-        memset(modeForceStruct, 0, nModeStruct * sizeof(real)); // reset struct mode force
-        get_struct_mode_force(modeForceStruct);                 // get struct mode force
+        memset(structModeForce, 0, nModeStruct * sizeof(real)); // reset struct mode force
+        get_struct_mode_force();                                // get struct mode force
     }
 #endif
 
 #if !RP_HOST
-    get_fluid_mode_force(modeForceThisTime, pDomain); // get modal force
+    get_fluid_mode_force(pDomain); // get modal force
 #endif
 
-    PRF_GRSUM(modeForceThisTime, nModeFluid, modeForceBuff); // global summation fo modal force this time
-    node_to_host_real(modeForceThisTime, nModeFluid);        // send mode force to host process
+    PRF_GRSUM(modeForce_ThisTime, nModeFluid, modeForceBuff); // global summation fo modal force this time
+    node_to_host_real(modeForce_ThisTime, nModeFluid);        // send mode force to host process
 
 #if !RP_NODE
-    for (int i = 0; i < nModeFewer; i++) // add struct force
-        modeForceThisTime[i] += modeForceStruct[i];
+    if (nModeStruct > 0)
+        for (int i = 0; i < nModeFewer; i++) // add struct force
+            modeForce_ThisTime[i] += structModeForce[i];
 
-    wilson_theta(modeForceThisTime, modeDispThisTime, dTime); // wilson theta method
+    wilson_theta(dTime); // wilson theta method
 #endif
 
-    host_to_node_real(modeDispThisTime, ND_ND * nModeFluid); // broadcast modal displacement to node process
+    host_to_node_real(modeDisp_ThisTime, nModeFluid * 3); // broadcast modal displacement to node process
 
-#if !RP_HOST                              // run on node process
-    move_grid(modeDispThisTime, pDomain); // move grid
+#if !RP_HOST            // run on node process
+    move_grid(pDomain); // move grid
 #endif
 
     iIter++;
@@ -286,7 +187,7 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
 #if !RP_NODE
     Message("UDF[Host]: time step is %d, time is %f, modal forces are ", iTime, CURRENT_TIME);
     for (int i = 0; i < nModeFluid; i++)
-        Message("%5.4e ", modeForce[iTime * nModeFluid + i]);
+        Message("%5.4e ", modeForce_ThisTime[i]);
     Message("\n");
 
     FILE *fpOutput = fopen("Result.csv", "a");
@@ -294,7 +195,7 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
     {
         time_t timep;
         time(&timep);
-        fprintf(fpOutput, "Calculation starts with %d processors, at %s", compute_node_count, asctime(gmtime(&timep)));
+        fprintf(fpOutput, "Calculation starts with %d processors, at %s", compute_node_count, asctime(localtime(&timep)));
         fprintf(fpOutput, "                Time,");
         for (int i = 0; i < nModeFluid; i++)
         {
@@ -302,9 +203,9 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
         }
         for (int i = 0; i < nModeFluid; i++)
         {
-            fprintf(fpOutput, "      Displacement%2d,", i * ND_ND + 0 + 1);
-            fprintf(fpOutput, "      Displacement%2d,", i * ND_ND + 1 + 1);
-            fprintf(fpOutput, "      Displacement%2d,", i * ND_ND + 2 + 1);
+            fprintf(fpOutput, "      Displacement%2d,", i + 1);
+            fprintf(fpOutput, "          Velocity%2d,", i + 1);
+            fprintf(fpOutput, "      Acceleration%2d,", i + 1);
         }
 
         fprintf(fpOutput, "\n");
@@ -312,37 +213,27 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
     fprintf(fpOutput, "%20.10f,", CURRENT_TIME);
     for (int i = 0; i < nModeFluid; i++)
     {
-        fprintf(fpOutput, "%20.10e,", modeForce[iTime * nModeFluid + i]);
+        fprintf(fpOutput, "%20.10e,", modeForce_ThisTime[i]);
     }
     for (int i = 0; i < nModeFluid; i++)
     {
         fprintf(fpOutput, "%20.10e,%20.10e,%20.10e,",
-                modeDisp[iTime * nModeFluid * 3 + i * 3 + 0],
-                modeDisp[iTime * nModeFluid * 3 + i * 3 + 1],
-                modeDisp[iTime * nModeFluid * 3 + i * 3 + 2]);
+                modeDisp_ThisTime[i * 3 + 0],
+                modeDisp_ThisTime[i * 3 + 1],
+                modeDisp_ThisTime[i * 3 + 2]);
     }
     fprintf(fpOutput, "\n");
     fclose(fpOutput);
 #endif
 
-    PRF_GSYNC();                   // synchronise
-    iIter = 1;                     // reset index for iteration
-    iTime++;                       // index for time +1
-    TimeSeq[iTime] = CURRENT_TIME; // record time
-}
+    memcpy(modeDisp_LastTime, modeDisp_ThisTime, nModeFluid * 3 * sizeof(real));
+    memset(modeDisp_ThisTime, 0, nModeFluid * 3 * sizeof(real));
+    memcpy(modeForce_LastTime, modeForce_ThisTime, nModeFluid * sizeof(real));
+    memset(modeForce_ThisTime, 0, nModeFluid * sizeof(real));
 
-/**
- * @brief clear memories at exit
- *
- */
-DEFINE_EXECUTE_AT_EXIT(Finish_process)
-{
-    free(TimeSeq); // clear memories
-    free(modeDisp);
-    free(modeFreq);
-    free(modeForce);
-    free(initVelocity);
-    Message0("UDF[Host]: All memories freed!\n");
+    PRF_GSYNC(); // synchronise
+    iIter = 1;   // reset index for iteration
+    iTime++;     // index for time +1
 }
 
 /**
@@ -351,12 +242,16 @@ DEFINE_EXECUTE_AT_EXIT(Finish_process)
  */
 DEFINE_ON_DEMAND(Clear_memories)
 {
-    free(TimeSeq); // clear memories
-    free(modeDisp);
-    free(modeFreq);
-    free(modeForce);
-    free(initVelocity);
-    Message0("UDF[Host]: All memories cleared!\n");
+    free_memories();
+}
+
+/**
+ * @brief clear memories at exit
+ *
+ */
+DEFINE_EXECUTE_AT_EXIT(Finish_process)
+{
+    free_memories();
 }
 
 /**
