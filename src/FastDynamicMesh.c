@@ -2,7 +2,7 @@
  * @file FastDynamicMesh.c
  * @author SpecialXuan (special.xuan@outlook.com)
  * @brief
- * @version 1.3.0
+ * @version 1.3.1
  * @date 2024-06-14
  *
  * @copyright Copyright (c) 2023
