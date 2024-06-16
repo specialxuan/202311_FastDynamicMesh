@@ -33,11 +33,10 @@ DEFINE_ON_DEMAND(Mode_calculation)
  */
 DEFINE_ON_DEMAND(Preprocess)
 {
-    iIter = 1; // initialise iteration index
     iTime = 0; // initialise time index
 
     RP_Set_Float("flow-time", 0); // set  flow time
-    free_memories();
+    free_fdm_memories();
 
     int fileStatus = 0;                                // size of node coordinates and modal displacements, number of modes, status of input file(0 is noError, 1 is Missing files, 2 is Missing data
 #if !RP_NODE                                           // run in host process
@@ -46,16 +45,11 @@ DEFINE_ON_DEMAND(Preprocess)
         int row = nNodeStruct, column = nModeStruct * ND_ND;                                 // size of structure modal displacement matrix
         Message("UDF[Host]: Structure: r = %d, c = %d, m = %d\n", row, column, nModeStruct); // print size of structure modal displacement and number of modes
 
-        structModeDisp = (double *)malloc(row * column * sizeof(double)); // allocate memories
-        memset(structModeDisp, 0, row * column * sizeof(double));         // initialize
-        structStiff = (double *)malloc(row * ND_ND * sizeof(double));
-        memset(structStiff, 0, row * ND_ND * sizeof(double));
-        structDamp = (double *)malloc(row * ND_ND * sizeof(double));
-        memset(structDamp, 0, row * ND_ND * sizeof(double));
-        structLoad = (double *)malloc(row * ND_ND * sizeof(double));
-        memset(structLoad, 0, row * ND_ND * sizeof(double));
-        structModeForce = (real *)malloc(nModeStruct * sizeof(real));
-        memset(structModeForce, 0, nModeStruct * sizeof(real));
+        NEW_MEMORIES(structModeDisp, double, (row * column));
+        NEW_MEMORIES(structStiff, double, (row * ND_ND));
+        NEW_MEMORIES(structDamp, double, (row * ND_ND));
+        NEW_MEMORIES(structLoad, double, (row * ND_ND));
+        NEW_MEMORIES(structModeForce, double, nModeStruct);
 
         for (int iMode = 0; iMode < nModeStruct; iMode++)                                   // input each modal displacement
             if (fileStatus = read_struct_coor_mode(structModeDisp, row, column, iMode + 1)) // if file or data missing, print error
@@ -80,21 +74,15 @@ DEFINE_ON_DEMAND(Preprocess)
         host_to_node_int_2(nNodeFluid, nModeFluid);              // broadcast size to all node process
         int row = nNodeFluid, column = (nModeFluid + 1) * ND_ND; // number of modes
 
-        double *nodeCoorDisp = NULL;                                    // node coordinates and modal displacements
-        nodeCoorDisp = (double *)malloc(row * column * sizeof(double)); // allocate memory for nodeCoorDisp
-        memset(nodeCoorDisp, 0, row * column * sizeof(double));         // initialize nodeCoorDisp
-        modeFreq = (real *)malloc(nModeFluid * sizeof(real));           // allocate memory for mode frequency
-        memset(modeFreq, 0, nModeFluid * sizeof(real));                 // initialize frequency
-        modeForce_ThisTime = (real *)malloc(nModeFluid * sizeof(real));
-        memset(modeForce_ThisTime, 0, nModeFluid * sizeof(real));
-        modeForce_LastTime = (real *)malloc(nModeFluid * sizeof(real));
-        memset(modeForce_LastTime, 0, nModeFluid * sizeof(real));
-        modeDisp_ThisTime = (real *)malloc(nModeFluid * 3 * sizeof(real));
-        memset(modeDisp_ThisTime, 0, nModeFluid * 3 * sizeof(real));
-        modeDisp_LastTime = (real *)malloc(nModeFluid * 3 * sizeof(real));
-        memset(modeDisp_LastTime, 0, nModeFluid * 3 * sizeof(real));
-        initVelocity = (real *)malloc(nModeFluid * sizeof(real));
-        memset(initVelocity, 0, nModeFluid * sizeof(real));
+        double *nodeCoorDisp = NULL; // node coordinates and modal displacements
+
+        NEW_MEMORIES(nodeCoorDisp, double, (row * column));
+        NEW_MEMORIES(modeFreq, real, nModeFluid);
+        NEW_MEMORIES(modeForce_ThisTime, real, nModeFluid);
+        NEW_MEMORIES(modeForce_LastTime, real, nModeFluid);
+        NEW_MEMORIES(modeDisp_ThisTime, real, (nModeFluid * 3));
+        NEW_MEMORIES(modeDisp_LastTime, real, (nModeFluid * 3));
+        NEW_MEMORIES(initVelocity, real, nModeFluid);
 
 #if !RP_NODE                                                                     // run in host process
         Message("UDF[Host]: r = %d, c = %d, m = %d\n", row, column, nModeFluid); // print size of node coordinates and modal displacement and number of modes
@@ -109,6 +97,12 @@ DEFINE_ON_DEMAND(Preprocess)
 
         qsort(nodeCoorDisp, row, column * sizeof(double), cmp_node); // sort by node coordinate
         read_paramater();
+
+#ifdef DEBUG_FDM
+        if (read_max_iteration() == 0)
+            NEW_MEMORIES(modeForce_Iter, real, (nModeFluid * maxIter));
+        iIter = 0; // initialise iteration index
+#endif
 #endif
 
         host_to_node_double(nodeCoorDisp, row * column); // broadcast node coordinate and modal displacement to all node process
@@ -117,9 +111,13 @@ DEFINE_ON_DEMAND(Preprocess)
         host_to_node_real(initVelocity, nModeFluid);
 
 #if !RP_HOST // run in node process
-        fill_modal_disp(nodeCoorDisp);
+        if (fileStatus == 0)
+            fill_modal_disp(nodeCoorDisp);
 #endif
+
         free(nodeCoorDisp); // clear memory
+        if (fileStatus != 0)
+            free_fdm_memories();
     }
     else
         Message("UDF[Host]: Error: %d\n", fileStatus);
@@ -175,7 +173,9 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
     move_grid(pDomain); // move grid
 #endif
 
+#ifdef DEBUG_FDM
     iIter++;
+#endif
 }
 
 /**
@@ -232,8 +232,11 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
     memset(modeForce_ThisTime, 0, nModeFluid * sizeof(real));
 
     PRF_GSYNC(); // synchronise
-    iIter = 1;   // reset index for iteration
     iTime++;     // index for time +1
+
+#ifdef DEBUG_FDM
+    iIter = 0; // reset index for iteration
+#endif
 }
 
 /**
@@ -242,7 +245,7 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
  */
 DEFINE_ON_DEMAND(Clear_memories)
 {
-    free_memories();
+    free_fdm_memories();
 }
 
 /**
@@ -251,7 +254,7 @@ DEFINE_ON_DEMAND(Clear_memories)
  */
 DEFINE_EXECUTE_AT_EXIT(Finish_process)
 {
-    free_memories();
+    free_fdm_memories();
 }
 
 /**

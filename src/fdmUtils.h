@@ -14,15 +14,17 @@
 #include <udf.h> // note: move udf.h to the last
 
 // debug
-#define DEBUG_FDM
+// #define DEBUG_FDM
 
 // node match tolerance
 #define NODE_MATCH_TOLERANCE 4e-7
 
-static int iIter = 1;    // record the number of the iteration steps
+// allocate new memories and initialize
+#define NEW_MEMORIES(n, t, s) n = (t *)malloc(s * sizeof(t)); memset(n, 0, s * sizeof(t))
+
 static int iTime = 0;    // record the number of the time steps
-static int idFSI = 23;   // record the id of the fsi faces, shown in fluent
-static int idFluid = 14; // record the id of the fluid cell zone, shown in fluent
+static int idFSI = 0;   // record the id of the fsi faces, shown in fluent
+static int idFluid = 0; // record the id of the fluid cell zone, shown in fluent
 
 static int nNodeFluid = 0;              // number of nodes in fluid
 static int nModeFluid = 0;              // number of modes in fluid
@@ -41,6 +43,12 @@ static real *modeDisp_ThisTime = NULL;  // modal-displacement,modal-velocity,acc
 static real *modeDisp_LastTime = NULL;  // modal-displacement,modal-velocity,acceleration repeat
 static real *initVelocity = NULL;       // initial modal velocity
 
+#ifdef DEBUG_FDM
+static int maxIter = 0; // maximum iteration per time step
+static int iIter = 0;   // record the number of the iteration steps
+static real *modeForce_Iter;
+#endif
+
 /**
  * @brief compare nodes in order of x, y, z
  *
@@ -57,7 +65,12 @@ int cmp_node(const void *const a, const void *const b)
     return xCmp ? xCmp : yCmp ? yCmp : zCmp ? zCmp : 0; // if x, then y, then z, then equal
 }
 
-int free_memories()
+/**
+ * @brief free all memories
+ * 
+ * @return int 
+ */
+int free_fdm_memories()
 {
     free(modeFreq);
     free(modeForce_ThisTime);
@@ -66,10 +79,40 @@ int free_memories()
     free(modeDisp_ThisTime);
     free(modeDisp_LastTime);
     free(initVelocity);
+
+#ifdef DEBUG_FDM
+    free(modeForce_Iter);
+#endif
+
     Message0("UDF[Host]: All memories cleared!\n");
 }
 
 #ifdef DEBUG_FDM
+/**
+ * @brief read max iteration per time step
+ * 
+ * @return int 
+ */
+int read_max_iteration()
+{
+    FILE *fpInput = fopen("mode/MaxIteration.csv", "r");
+    if (fpInput == NULL) // file not exists print error
+    {
+        Message("UDF[Host]: Error: No max iteration files.\n");
+        return 1;
+    }
+    fscanf(fpInput, "%d", maxIter);
+    Message0("UDF[Host]: Max iteration is %d\n", maxIter);
+    fclose(fpInput);
+    return 0;
+}
+
+/**
+ * @brief output debug information
+ * 
+ * @param debugMessage debug information
+ * @return int 
+ */
 int debug_file_print(const char *const debugMessage)
 {
     static int debugFilePrintCount = 0;
@@ -106,14 +149,14 @@ int read_struct_nodes_modes()
     FILE *fpInput = fopen(inFileName, "r");          // open file read only
     if (fpInput == NULL)                             // file not exists print error
     {
-        Message("UDF[Host]: Error: No Struct files.\n");
+        Message("UDF[Host]: Structure: Error: No Struct files.\n");
         return 1;
     }
     if (fscanf(fpInput, "%lf,", &nNodeFromFile) <= 0 || // ignore first number
         fscanf(fpInput, "%lf,", &nNodeFromFile) <= 0 || // input number of nodes
         fscanf(fpInput, "%lf,", &nModeFromFile) <= 0)   // input number of modes
     {
-        Message("UDF[Host]: Error: Lack of Struct variables.\n");
+        Message("UDF[Host]: Structure: Error: Lack of Struct variables.\n");
         fclose(fpInput);
         return 2;
     }
