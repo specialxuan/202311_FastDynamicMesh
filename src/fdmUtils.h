@@ -14,14 +14,18 @@
 #include <udf.h> // note: move udf.h to the last
 
 // debug
-// #define DEBUG_FDM
+#define DEBUG_FDM
 
 // node match tolerance
 #define NODE_MATCH_TOLERANCE 4e-7
 
+// converge tolerance
+#define CONVERGE_TOLERANCE 1e-5
+
 // allocate new memories and initialize
 #define NEW_MEMORIES(n, t, s) n = (t *)malloc(s * sizeof(t)); memset(n, 0, s * sizeof(t))
 
+static int iIter = 0;   // record the number of the iteration steps
 static int iTime = 0;    // record the number of the time steps
 static int idFSI = 0;   // record the id of the fsi faces, shown in fluent
 static int idFluid = 0; // record the id of the fluid cell zone, shown in fluent
@@ -43,10 +47,16 @@ static real *modeDisp_ThisTime = NULL;  // modal-displacement,modal-velocity,acc
 static real *modeDisp_LastTime = NULL;  // modal-displacement,modal-velocity,acceleration repeat
 static real *initVelocity = NULL;       // initial modal velocity
 
+#if !RP_NODE
+static real *modeForce_LastIter = NULL; // modal force
+static real *modeForce_LaLaIter = NULL; // modal force
+#endif
+
 #ifdef DEBUG_FDM
+#if !RP_NODE
 static int maxIter = 0; // maximum iteration per time step
-static int iIter = 0;   // record the number of the iteration steps
 static real *modeForce_Iter;
+#endif
 #endif
 
 /**
@@ -80,14 +90,19 @@ int free_fdm_memories()
     free(modeDisp_LastTime);
     free(initVelocity);
 
+#if !RP_NODE
+    free(modeForce_LastIter);
+    free(modeForce_LaLaIter);
 #ifdef DEBUG_FDM
     free(modeForce_Iter);
+#endif
 #endif
 
     Message0("UDF[Host]: All memories cleared!\n");
 }
 
 #ifdef DEBUG_FDM
+#if !RP_NODE
 /**
  * @brief read max iteration per time step
  * 
@@ -106,6 +121,7 @@ int read_max_iteration()
     fclose(fpInput);
     return 0;
 }
+#endif
 
 /**
  * @brief output debug information

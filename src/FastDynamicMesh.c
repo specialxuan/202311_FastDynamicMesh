@@ -10,7 +10,7 @@
  */
 
 #include "fdmUtils.h"
-#include <udf.h>
+// #include <udf.h>
 
 /**
  * @brief calculate modal displacement
@@ -33,6 +33,7 @@ DEFINE_ON_DEMAND(Mode_calculation)
  */
 DEFINE_ON_DEMAND(Preprocess)
 {
+    iIter = 0; // initialise iteration index
     iTime = 0; // initialise time index
 
     RP_Set_Float("flow-time", 0); // set  flow time
@@ -85,6 +86,9 @@ DEFINE_ON_DEMAND(Preprocess)
         NEW_MEMORIES(initVelocity, real, nModeFluid);
 
 #if !RP_NODE                                                                     // run in host process
+        NEW_MEMORIES(modeForce_LastIter, real, nModeFluid);
+        NEW_MEMORIES(modeForce_LaLaIter, real, nModeFluid);
+        
         Message("UDF[Host]: r = %d, c = %d, m = %d\n", row, column, nModeFluid); // print size of node coordinates and modal displacement and number of modes
 
         for (int iMode = 0; iMode < nModeFluid + 1; iMode++)                      // input each modal displacement
@@ -101,7 +105,6 @@ DEFINE_ON_DEMAND(Preprocess)
 #ifdef DEBUG_FDM
         if (read_max_iteration() == 0)
             NEW_MEMORIES(modeForce_Iter, real, (nModeFluid * maxIter));
-        iIter = 0; // initialise iteration index
 #endif
 #endif
 
@@ -138,6 +141,7 @@ DEFINE_EXECUTE_AFTER_DATA(AutoPreprocess, libudf)
  */
 DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
 {
+    int notConverged = 0;
     real modeForceBuff[nModeFluid];                              // modal force this time, buffer
     memset(modeDisp_ThisTime, 0, nModeFluid * 3 * sizeof(real)); // allocate memory
     memset(modeForce_ThisTime, 0, nModeFluid * sizeof(real));
@@ -164,6 +168,22 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
         for (int i = 0; i < nModeFewer; i++) // add struct force
             modeForce_ThisTime[i] += structModeForce[i];
 
+    for (int i = 0; i < nModeFluid; i++)
+    {
+        modeForce_LaLaIter[i] = 2 * modeForce_LastIter[i] - modeForce_LaLaIter[i];
+        notConverged = notConverged || (abs(modeForce_ThisTime[i] - modeForce_LaLaIter[i]) > CONVERGE_TOLERANCE);
+    }
+
+    if (iIter > 2 && notConverged)
+        for (int j = 0; j < nModeFluid; j++)
+            modeForce_ThisTime[j] = (modeForce_ThisTime[j] + modeForce_LaLaIter[j]) / 2;
+
+    memcpy(modeForce_LaLaIter, modeForce_LastIter, nModeFluid * sizeof(real));
+    memcpy(modeForce_LastIter, modeForce_ThisTime, nModeFluid * sizeof(real));
+#ifdef DEBUG_FDM
+    memcpy(modeForce_Iter + iIter * nModeFluid, modeForce_ThisTime, nModeFluid * sizeof(real));
+#endif
+
     wilson_theta(dTime); // wilson theta method
 #endif
 
@@ -173,9 +193,7 @@ DEFINE_GRID_MOTION(FDM_method, pDomain, dt, time, dTime)
     move_grid(pDomain); // move grid
 #endif
 
-#ifdef DEBUG_FDM
     iIter++;
-#endif
 }
 
 /**
@@ -224,6 +242,17 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
     }
     fprintf(fpOutput, "\n");
     fclose(fpOutput);
+
+#ifdef DEBUG_FDM
+    char debugMessage[1024] = {0};
+    for (int i = 0; i < maxIter; i++)
+        sprintf(debugMessage, "%20.10e,", modeForce_Iter[i]);
+    debug_file_print(debugMessage);
+    memset(modeForce_Iter, 0, maxIter * nModeFluid * sizeof(real));
+#endif
+
+    memset(modeForce_LastIter, 0, nModeFluid * sizeof(real));
+    memset(modeForce_LaLaIter, 0, nModeFluid * sizeof(real));
 #endif
 
     memcpy(modeDisp_LastTime, modeDisp_ThisTime, nModeFluid * 3 * sizeof(real));
@@ -233,10 +262,7 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
 
     PRF_GSYNC(); // synchronise
     iTime++;     // index for time +1
-
-#ifdef DEBUG_FDM
-    iIter = 0; // reset index for iteration
-#endif
+    iIter = 0;   // reset index for iteration
 }
 
 /**
