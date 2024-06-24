@@ -2,8 +2,8 @@
  * @file fdmUtils.h
  * @author Special (special.xuan@outlook.com)
  * @brief
- * @version 1.3.1
- * @date 2024-06-14
+ * @version 1.4.0
+ * @date 2024-06-24
  *
  * @copyright Copyright (c) 2023
  *
@@ -55,7 +55,7 @@ static real *modeForce_LaLaIter = NULL; // modal force
 #ifdef DEBUG_FDM
 #if !RP_NODE
 static int maxIter = 0; // maximum iteration per time step
-static real *modeForce_Iter;
+static real *modeForce_Iter = NULL;
 #endif
 #endif
 
@@ -93,7 +93,10 @@ int free_fdm_memories()
 #if !RP_NODE
     free(modeForce_LastIter);
     free(modeForce_LaLaIter);
+#endif
+
 #ifdef DEBUG_FDM
+#if !RP_NODE
     free(modeForce_Iter);
 #endif
 #endif
@@ -116,8 +119,8 @@ int read_max_iteration()
         Message("UDF[Host]: Error: No max iteration files.\n");
         return 1;
     }
-    fscanf(fpInput, "%d", maxIter);
-    Message0("UDF[Host]: Max iteration is %d\n", maxIter);
+    fscanf(fpInput, "%d,", &maxIter);
+    Message("UDF[Host]: Max iteration is %d\n", maxIter);
     fclose(fpInput);
     return 0;
 }

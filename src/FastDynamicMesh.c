@@ -2,8 +2,8 @@
  * @file FastDynamicMesh.c
  * @author SpecialXuan (special.xuan@outlook.com)
  * @brief
- * @version 1.3.1
- * @date 2024-06-14
+ * @version 1.4.0
+ * @date 2024-06-24
  *
  * @copyright Copyright (c) 2023
  *
@@ -85,10 +85,10 @@ DEFINE_ON_DEMAND(Preprocess)
         NEW_MEMORIES(modeDisp_LastTime, real, (nModeFluid * 3));
         NEW_MEMORIES(initVelocity, real, nModeFluid);
 
-#if !RP_NODE                                                                     // run in host process
+#if !RP_NODE // run in host process
         NEW_MEMORIES(modeForce_LastIter, real, nModeFluid);
         NEW_MEMORIES(modeForce_LaLaIter, real, nModeFluid);
-        
+
         Message("UDF[Host]: r = %d, c = %d, m = %d\n", row, column, nModeFluid); // print size of node coordinates and modal displacement and number of modes
 
         for (int iMode = 0; iMode < nModeFluid + 1; iMode++)                      // input each modal displacement
@@ -245,9 +245,16 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
 
 #ifdef DEBUG_FDM
     char debugMessage[1024] = {0};
-    for (int i = 0; i < maxIter; i++)
-        sprintf(debugMessage, "%20.10e,", modeForce_Iter[i]);
+    sprintf(debugMessage, "Time Step %d\n", iTime);
     debug_file_print(debugMessage);
+    for (int i = 0; i < maxIter; i++)
+    {
+        memset(debugMessage, 0, 1024 * sizeof(char));
+        for (int j = 0; j < nModeFluid; j++)
+            sprintf(debugMessage, "%s %20.10e,", debugMessage, modeForce_Iter[i * nModeFluid + j]);
+        sprintf(debugMessage, "%s\n", debugMessage);
+        debug_file_print(debugMessage);
+    }
     memset(modeForce_Iter, 0, maxIter * nModeFluid * sizeof(real));
 #endif
 
