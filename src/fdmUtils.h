@@ -2,8 +2,8 @@
  * @file fdmUtils.h
  * @author Special (special.xuan@outlook.com)
  * @brief
- * @version 1.4.0
- * @date 2024-06-24
+ * @version 1.4.1
+ * @date 2024-06-25
  *
  * @copyright Copyright (c) 2023
  *
@@ -76,11 +76,39 @@ int cmp_node(const void *const a, const void *const b)
 }
 
 /**
+ * @brief sequencial search
+ *
+ * @param key key element
+ * @param base base elements
+ * @param nElements number of elements
+ * @param sElemets size of elements
+ * @return double*
+ */
+double *ssearch(const double *const key, const double *const base, const int nElements, const int sElements)
+{
+    double D = 0, *pResult = NULL;
+    for (int i = 0; i < nElements; i++)
+    {
+        D = 0;
+        for (int j = 0; j < ND_ND; j++)
+            D += (key[j] - base[i * sElements + j]) * (key[j] - base[i * sElements + j]);
+        D = sqrt(D);
+
+        if (D < NODE_MATCH_TOLERANCE)
+        {
+            pResult = (double *)base + i * sElements;
+            break;
+        }
+    }
+    return pResult;
+}
+
+/**
  * @brief free all memories
  * 
  * @return int 
  */
-int free_fdm_memories()
+void free_fdm_memories()
 {
     free(modeFreq);
     free(modeForce_ThisTime);
@@ -524,7 +552,7 @@ int fill_modal_disp(const double *const nodeCoorDisp)
     Node *pNode;     // pointer of node
 
     const int row = nNodeFluid, column = (nModeFluid + 1) * ND_ND;
-    int iNode = 0, nodeCount = 0, UDMIColumn = column - ND_ND; // node index, total number of node, columns of UDMI
+    int iNode = 0, nodeCount = 0, nodeErrorCount = 0, UDMIColumn = column - ND_ND; // node index, total number of node, columns of UDMI
     double node_coor[ND_ND] = {0}, *thisNode = NULL;           // buffer of node coordinate, pointer of this node
 
     char outFileName[30] = {0};                          // output file name
@@ -539,7 +567,7 @@ int fill_modal_disp(const double *const nodeCoorDisp)
             c_node_loop(pCell, pThread, iNode) // loop node in cell
             {
                 pNode = C_NODE(pCell, pThread, iNode); // get node pointer
-                N_UDMI(pNode, UDMIColumn) = 0;                         // last column of UDMI is 0 indicates not set, 1 indicates set
+                N_UDMI(pNode, UDMIColumn) = 0;         // last column of UDMI is 0 indicates not set, 1 indicates set
             }
         }
     end_c_loop_int_ext(pCell, pThread) // finish cell loop
@@ -551,36 +579,43 @@ int fill_modal_disp(const double *const nodeCoorDisp)
             c_node_loop(pCell, pThread, iNode) // loop node in cell
             {
                 pNode = C_NODE(pCell, pThread, iNode); // get node pointer
-                if (N_UDMI(pNode, UDMIColumn) == 0)                    // if node not set
+                if (N_UDMI(pNode, UDMIColumn) != 0)    // if node set
+                    continue;
+                
+                node_coor[0] = NODE_X(pNode); // get coordinate of this node
+                node_coor[1] = NODE_Y(pNode);
+                node_coor[2] = NODE_Z(pNode);
+
+                thisNode = (double *)bsearch(node_coor, nodeCoorDisp, row, column * sizeof(double), cmp_node); // search for this node
+                if (thisNode != NULL)                    // if this node found
                 {
-                    node_coor[0] = NODE_X(pNode); // get coordinate of this node
-                    node_coor[1] = NODE_Y(pNode);
-                    node_coor[2] = NODE_Z(pNode);
-
-                    thisNode = (double *)bsearch(node_coor, nodeCoorDisp, row, column * sizeof(double), cmp_node); // search for this node
-
-                    if (thisNode != NULL)                    // if this node found
-                        for (int i = 0; i < UDMIColumn; i++) // fill UDMI with modal displacement
-                        {
-                            N_UDMI(pNode, i) = thisNode[i + ND_ND];
-                            fprintf(fpOutput, "%f,", N_UDMI(pNode, i)); // if this node not found, output error in file
-                        }
-                    else
-                    {
-                        fprintf(fpOutput, "Error: no node at (%f, %f, %f)", node_coor[0], node_coor[1], node_coor[2]); // if this node not found, output error in file
-                        Message("UDF[Node]: Error: no node at (%f, %f, %f)\n", node_coor[0], node_coor[1], node_coor[2]);
-                    }
-
-                    fprintf(fpOutput, "\n");
+                    for (int i = 0; i < UDMIColumn; i++) // fill UDMI with modal displacement
+                        N_UDMI(pNode, i) = thisNode[i + ND_ND];
                     N_UDMI(pNode, UDMIColumn) = 1; // this node set
                     nodeCount++;                   // count how many nodes in this process
+                    continue;
                 }
+
+                thisNode = ssearch(node_coor, nodeCoorDisp, row, column);
+                if (thisNode != NULL)                    // if this node found
+                {
+                    for (int i = 0; i < UDMIColumn; i++) // fill UDMI with modal displacement
+                        N_UDMI(pNode, i) = thisNode[i + ND_ND];
+                    fprintf(fpOutput, "node at (%20.10e, %20.10e, %20.10e), (%20.10e, %20.10e, %20.10e)\n", node_coor[0], node_coor[1], node_coor[2], thisNode[0], thisNode[1], thisNode[2]); // if this node not found, output error in file
+                }
+                else
+                {
+                    fprintf(fpOutput, "Error: no node at (%20.10e, %20.10e, %20.10e)\n", node_coor[0], node_coor[1], node_coor[2]); // if this node not found, output error in file
+                    nodeErrorCount++;
+                }
+                N_UDMI(pNode, UDMIColumn) = 1; // this node set
+                nodeCount++;                   // count how many nodes in this process
             }
         }
         end_c_loop_int_ext(pCell, pThread) // finish cell loop
         }
     fclose(fpOutput);                                                                // close file
-    Message("UDF[Node]: Total Number of nodes in NODE %d is %d\n", myid, nodeCount); // print how many nodes in this process
+    Message("UDF[Node]: Total Number of nodes in NODE %d is %d, Error nodes is %d\n", myid, nodeCount, nodeErrorCount); // print how many nodes in this process
 
     return 0;
 }
@@ -617,7 +652,7 @@ int get_fluid_mode_force(Domain *const pDomain)
         NV_VS(ShearVector, =, F_STORAGE_R_NV(pFace, pThread, SV_WALL_SHEAR), *, -1.0); // get shear vector
         NV_V_VS(ForceVector, =, ShearVector, +, AreaVector, *, Press); // calculate pressure vector
 #ifdef DEBUG_FDM
-        if (iTime == 2 && iIter == 1)
+        if (iTime == 2)
         {
             F_Centroid(AreaCentroid, pFace, pThread);
             sprintf(debugMessage, "%5d, %20.10e, %20.10e, %5d,\n",

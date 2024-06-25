@@ -2,8 +2,8 @@
  * @file FastDynamicMesh.c
  * @author SpecialXuan (special.xuan@outlook.com)
  * @brief
- * @version 1.4.0
- * @date 2024-06-24
+ * @version 1.4.1
+ * @date 2024-06-25
  *
  * @copyright Copyright (c) 2023
  *
@@ -100,6 +100,16 @@ DEFINE_ON_DEMAND(Preprocess)
             Message("           %f\n", modeFreq[i]);
 
         qsort(nodeCoorDisp, row, column * sizeof(double), cmp_node); // sort by node coordinate
+
+        FILE *fpOutput = fopen("FluidOutputNodeHost.csv", "w+"); // open output file in write mode
+        for (int i = 0; i < row; i++)
+        {
+            for (int j = 0; j < 3; j++)
+                fprintf(fpOutput, " %20.10e,", nodeCoorDisp[i * column + j]);
+            fprintf(fpOutput, "\n");
+        }
+        fclose(fpOutput);
+
         read_paramater();
 
 #ifdef DEBUG_FDM
@@ -109,7 +119,7 @@ DEFINE_ON_DEMAND(Preprocess)
 #endif
 
         host_to_node_double(nodeCoorDisp, row * column); // broadcast node coordinate and modal displacement to all node process
-        host_to_node_double(modeFreq, nModeFluid);       // broadcast mode frequency to node process
+        host_to_node_real(modeFreq, nModeFluid);       // broadcast mode frequency to node process
         host_to_node_int_2(idFSI, idFluid);
         host_to_node_real(initVelocity, nModeFluid);
 
