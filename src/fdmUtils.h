@@ -106,7 +106,6 @@ void free_fdm_memories()
 }
 
 #ifdef DEBUG_FDM
-
 /**
  * @brief output debug information
  * 
@@ -523,7 +522,7 @@ int fill_modal_disp(const double *const nodeCoorDisp)
                 N_UDMI(pNode, UDMIColumn) = 0;         // last column of UDMI is 0 indicates not set, 1 indicates set
             }
         }
-    end_c_loop_int_ext(pCell, pThread) // finish cell loop
+        end_c_loop_int_ext(pCell, pThread) // finish cell loop
     }
     thread_loop_c(pThread, pDomain) // loop thread in domain
     {
@@ -566,7 +565,7 @@ int fill_modal_disp(const double *const nodeCoorDisp)
             }
         }
         end_c_loop_int_ext(pCell, pThread) // finish cell loop
-        }
+    }
     fclose(fpOutput);                                                                // close file
     Message("UDF[Node]: Total Number of nodes in NODE %d is %d, Error nodes is %d\n", myid, nodeCount, nodeErrorCount); // print how many nodes in this process
 

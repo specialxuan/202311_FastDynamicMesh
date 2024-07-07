@@ -3,7 +3,7 @@
 *set, all, , ! clear all parameters
 
 /post1
-CMSEL,S,fluid
+CMSEL,S,PASSAGE_MAIN
 *GET,N_Node,node,0,count,,, ! get the number of nodes
 *GET,L_Node,node,0,num,min,,
 *GET,H_Node,node,0,num,max,,
@@ -70,7 +70,7 @@ NodeCoorDisp(i_Node-L_Node+1, 2) = N_UZ
 *set, all, , ! clear all parameters
 
 /post1
-CMSEL,S,beam
+CMSEL,S,BLADE
 *GET,N_Node,node,0,count,,, ! get the number of nodes
 *GET,L_Node,node,0,num,min,,
 *GET,H_Node,node,0,num,max,,

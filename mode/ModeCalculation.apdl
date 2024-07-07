@@ -1,7 +1,7 @@
 /CLEAR
-/INPUT,'beam_and_fluid','in'
+/INPUT,'Roter37Mesh','in'
 
-CMSEL,S,FLUID
+CMSEL,S,PASSAGE_MAIN
 ESLN
 *GET,total_ele,ELEM,0,COUNT
 *dim,volu_stiffness,,total_ele,3
@@ -28,33 +28,26 @@ finish
 
 /prep7
 !第一个用s，后面要用a
-cmsel,s,fluid_wall_top,node
-cmsel,a,fluid_wall_bottom,node
-cmsel,a,fluid_wall_cylinder,node
-cmsel,a,fluid_velocity_inlet,node
-cmsel,a,fluid_pressure_outlet,node
-cmsel,a,beam_fixe_face,node
+cmsel,s,BLADE_BOTTOM,node
+cmsel,a,INBLOCK_INFLOW,node
+cmsel,a,OUTBLOCK_OUTFLOW,node
+cmsel,a,PASSAGE_HUB,node
+cmsel,a,PASSAGE_PER1,node
+cmsel,a,PASSAGE_PER2,node
 d,all,all
 
-cmsel,s,beam_symmetry_0,node
-cmsel,a,beam_symmetry_1,node
-cmsel,a,fluid_symmetry_0,node
-cmsel,a,fluid_symmetry_1,node
-d,all,uz
-
-CMSEL,S,BEAM_FLUID_STRUCTURE_INTERFACE
+CMSEL,S,BLADE_FSI
 ESLN
-CMSEL,S,FLUID_FLUID_STRUCTURE_INTERFACE
+CMSEL,S,FSI
 CEINTF,1.2,,,,,,0.05
 ALLSEL,,
 !把两个面约束住
 
-
 /prep7
 mp,dens,2,0
-mp,ex,2,0.1
+mp,ex,2,2.01E5
 mp,prxy,2,0
-CMSEL,S,FLUID
+CMSEL,S,PASSAGE_MAIN
 ESLN
 emodif,all,mat,2
 
@@ -77,7 +70,7 @@ EQSLV,SPAR
 MXPAND,10, , ,0 
 LUMPM,0 
 PSTRES,0
-MODOPT,LANB,10,0.334,0, ,OFF
+MODOPT,LANB,10,0,0, ,OFF
 
 ALLSEL,,
 !求解
@@ -89,7 +82,7 @@ SOLVE
 *set, all, , ! clear all parameters
 
 /post1
-CMSEL,S,fluid
+CMSEL,S,PASSAGE_MAIN
 *GET,N_Node,node,0,count,,, ! get the number of nodes
 *GET,L_Node,node,0,num,min,,
 *GET,H_Node,node,0,num,max,,
@@ -156,7 +149,7 @@ NodeCoorDisp(i_Node-L_Node+1, 2) = N_UZ
 *set, all, , ! clear all parameters
 
 /post1
-CMSEL,S,beam
+CMSEL,S,BLADE
 *GET,N_Node,node,0,count,,, ! get the number of nodes
 *GET,L_Node,node,0,num,min,,
 *GET,H_Node,node,0,num,max,,

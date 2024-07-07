@@ -110,7 +110,7 @@ DEFINE_ON_DEMAND(Preprocess)
 #endif
 
         host_to_node_double(nodeCoorDisp, row * column); // broadcast node coordinate and modal displacement to all node process
-        host_to_node_real(modeFreq, nModeFluid);       // broadcast mode frequency to node process
+        host_to_node_real(modeFreq, nModeFluid);         // broadcast mode frequency to node process
         host_to_node_int_2(idFSI, idFluid);
         host_to_node_real(initVelocity, nModeFluid);
 
@@ -233,7 +233,6 @@ DEFINE_EXECUTE_AT_END(Set_next_time_step)
 
     PRF_GSYNC(); // synchronise
     iTime++;     // index for time +1
-
 }
 
 /**
