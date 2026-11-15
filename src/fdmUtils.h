@@ -14,7 +14,7 @@
 #include <udf.h> // note: move udf.h to the last
 
 // debug
-#define DEBUG_FDM
+// #define DEBUG_FDM
 
 // node match tolerance
 #define NODE_MATCH_TOLERANCE 4e-7
