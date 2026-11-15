@@ -18,6 +18,8 @@ mode/Mode*
 *.tmp
 *.flprj
 *.csv
+# FluidPara.csv 是唯一纳入版本控制的 CSV（按算例分支各存一份）
+!mode/FluidPara.csv
 *.zip
 *.jou
 cleanup*

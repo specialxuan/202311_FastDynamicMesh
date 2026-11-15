@@ -61,13 +61,13 @@ git switch Alpha
 
 分支与算例对应关系：
 
-| 分支 | 版本 | 算例 | `mode/` 模型输入 | 说明 |
-|---|---|---|---|---|
-| `master` | 1.3.2 | — | 无 | 默认分支，已删除 `mode/`，不要直接用于计算 |
-| `Alpha` | 1.3.2 | 涡激弹性梁（flow around beam） | `beam_and_fluid.in` | 各算例分支的基线 |
-| `DamFailure` | 1.3.2 | 溃坝（dam failure） | `system.in` | APDL 的组件名/材料号与梁算例不同 |
-| `Rotor37` | 1.3.2 | Rotor 37 压气机 | `Roter37Mesh.in` | 使用另一套网格 |
-| `Semi-Implicit` | 1.4.1 | 弹性梁 + 半隐式迭代 | `beam_and_fluid.in` | 在 Alpha 基础上增加半隐式迭代 |
+| 分支 | 版本 | 算例 | `mode/` 模型输入 | `FluidPara.csv` | 说明 |
+|---|---|---|---|---|---|
+| `master` | 1.3.2 | — | 无 | — | 默认分支，已删除 `mode/`，不要直接用于计算 |
+| `Alpha` | 1.3.2 | 涡激弹性梁（flow around beam） | `beam_and_fluid.in` | 23 / 14，10 个初速度 | 各算例分支的基线 |
+| `DamFailure` | 1.3.2 | 溃坝（dam failure） | `system.in` | 19 / 11，5 个初速度 | APDL 的组件名/材料号与梁算例不同 |
+| `Rotor37` | 1.3.2 | Rotor 37 压气机 | `Roter37Mesh.in` | 26 / 22，10 个初速度 | 使用另一套网格 |
+| `Semi-Implicit` | 1.4.1 | 弹性梁 + 半隐式迭代 | `beam_and_fluid.in` | 23 / 14，10 个初速度 | 在 Alpha 基础上增加半隐式迭代 |
 
 **重要**：`mode/*.csv` 不在版本控制中，切换分支不会切换算例数据。使用哪个算例，就要把该算例的 CSV 数据放进 `mode/`，并使用**同一分支**的 APDL（不同算例的组件名、约束面、材料号、模态数都不同，APDL 不能混用）。
 
@@ -146,7 +146,7 @@ build/src/generated/ud_io1.h      # 由 Fluent 的 resolve.exe 生成
      ```
 
 2. **准备 UDF 输入**
-   - `mode/FluidPara.csv`：`idFSI`、`idFluid`、各阶模态初速度。该文件**不随仓库分发**，需按算例从归档中复制或手工创建。
+   - `mode/FluidPara.csv`：`idFSI`、`idFluid`、各阶模态初速度。该文件已按算例分支提交（见分支表），切换分支后请确认内容与当前算例一致；使用新算例时需要自行修改。
    - 结构数据可选：缺少 `StructNodeCoor.csv` 时 `nModeStruct = 0`，结构力反馈自动关闭，程序仍可计算。
 
 3. **编译 UDF**（见第 4 节），确保已生成 `libudf/win64/3ddp_host` 和 `3ddp_node`。
@@ -171,7 +171,8 @@ build/src/generated/ud_io1.h      # 由 Fluent 的 resolve.exe 生成
 `.gitignore` 已忽略：
 
 - `build/`、`libudf/`、`debug/`、`exe/`
-- `*.csv`（所有算例的模态/节点数据、`FluidPara.csv`）
+- `*.csv`（模态/节点数据等）；例外：`mode/FluidPara.csv` 按分支提交
+- `mode/FluidPara.csv` 是唯一纳入版本控制的 CSV，记录当前算例的 `idFSI` / `idFluid` / 初速度
 - `*.msh`、`*.h5`、`*.trn`、`*.log`、`*.zip`、`*.jou`
 - `FDMOutput.txt`（Fluent 日志）
 - `src/udf_names.c`、`src/ud_io1.h`（生成物）
