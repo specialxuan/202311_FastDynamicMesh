@@ -7,6 +7,8 @@ set(VERSION_HOST ${DIMENSION}${PRECISE}_host)
 set(VERSION_NODE ${DIMENSION}${PRECISE}_node)
 
 include(FileProcess)
+# udf_names.c 在构建目录中生成，不在源码目录
+set_source_files_properties(${UDF_NAMES_DIR}/udf_names.c PROPERTIES GENERATED TRUE)
 # 添加编译选项
 add_compile_definitions(UDF_EXPORTING UDF_NT WIN64)
 
@@ -64,9 +66,10 @@ set(LIBS_NODE ${FLUENT_ROOT}/fluent${RELEASE}/${FLUENT_ARCH}/${VERSION_NODE}
 
 #
 # HOST libudf
-add_library(udfhost SHARED ${CSOURCES} ${CXXSOURCES} udf_names.c)
+add_library(udfhost SHARED ${CSOURCES} ${CXXSOURCES} ${UDF_NAMES_DIR}/udf_names.c)
 target_include_directories(udfhost PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${UDF_NAMES_DIR}
     ${FLUENT_ROOT}/fluent${RELEASE}/${FLUENT_ARCH}/${VERSION_HOST}
     ${UDF_INCLUDE_DIRS}
 )
@@ -99,9 +102,10 @@ endif()
 
 #
 # NODE libudf
-add_library(udfnode SHARED ${CSOURCES} ${CXXSOURCES} udf_names.c)
+add_library(udfnode SHARED ${CSOURCES} ${CXXSOURCES} ${UDF_NAMES_DIR}/udf_names.c)
 target_include_directories(udfnode PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
+    ${UDF_NAMES_DIR}
     ${FLUENT_ROOT}/fluent${RELEASE}/${FLUENT_ARCH}/${VERSION_NODE}
     ${UDF_INCLUDE_DIRS}
 )

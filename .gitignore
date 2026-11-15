@@ -1,4 +1,7 @@
 .vscode/*
+# 只跟踪项目级调试/构建配置，个人设置仍忽略
+!.vscode/launch.json
+!.vscode/tasks.json
 animation/*
 build/*
 data/*
@@ -19,3 +22,8 @@ mode/Mode*
 *.jou
 cleanup*
 animation*
+
+# 生成物 / 运行输出（不要提交）
+FDMOutput.txt
+src/udf_names.c
+src/ud_io1.h

@@ -1,5 +1,11 @@
+# 生成物统一放到构建目录，避免配置时污染源码树
+set(UDF_NAMES_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY "${UDF_NAMES_DIR}")
+
+set(UDF_SOURCE_PATHS "")
 foreach(CFILE ${CSOURCES})
-    file(STRINGS ${CFILE} SOURCE_STR)
+    list(APPEND UDF_SOURCE_PATHS "${CMAKE_CURRENT_SOURCE_DIR}/${CFILE}")
+    file(STRINGS "${CMAKE_CURRENT_SOURCE_DIR}/${CFILE}" SOURCE_STR)
     foreach(LINE ${SOURCE_STR})
         if(LINE MATCHES "^ *DEFINE_[_A-Z]*\\(.*\\)")
             string(REGEX REPLACE "^ *(DEFINE_[_A-Z]*\\(.*\\))"
@@ -39,9 +45,15 @@ set(UDFNAMES_CONTENT
     "}"
 )
 
-file(WRITE udf_names.c ${UDFNAMES_CONTENT})
+file(WRITE "${UDF_NAMES_DIR}/udf_names.c" ${UDFNAMES_CONTENT})
 
 execute_process(
-    COMMAND ${TOOL_PATH}/resolve.exe -udf ${CSOURCES} -head_file ud_io1.h
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    COMMAND ${TOOL_PATH}/resolve.exe -udf ${UDF_SOURCE_PATHS} -head_file ud_io1.h
+    WORKING_DIRECTORY "${UDF_NAMES_DIR}"
+    RESULT_VARIABLE UDF_RESOLVE_RESULT
 )
+if(NOT UDF_RESOLVE_RESULT STREQUAL "0")
+    message(WARNING
+        "resolve.exe failed (result: ${UDF_RESOLVE_RESULT}); ud_io1.h was not generated. "
+        "Check that ${TOOL_PATH}/resolve.exe exists and that FLUENT_ROOT/FLUENT_ARCH are correct.")
+endif()

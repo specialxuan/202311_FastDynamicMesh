@@ -1,0 +1,48 @@
+{
+    "version": 3,
+    "cmakeMinimumRequired": {
+        "major": 3,
+        "minor": 21,
+        "patch": 0
+    },
+    "configurePresets": [
+        {
+            "name": "mingw-debug",
+            "displayName": "MinGW Makefiles (Debug)",
+            "description": "参考环境：MinGW-w64 gcc 8.1.0 + ANSYS Fluent 2022 R1。如工具链或 Fluent 装在别处，请修改下面的路径。",
+            "generator": "MinGW Makefiles",
+            "binaryDir": "${sourceDir}/build",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Debug",
+                "CMAKE_EXPORT_COMPILE_COMMANDS": "ON",
+                "CMAKE_C_COMPILER": "C:/Program Files/mingw64/bin/gcc.exe",
+                "CMAKE_CXX_COMPILER": "C:/Program Files/mingw64/bin/g++.exe",
+                "FLUENT_ROOT": "C:/Program Files/ANSYS Inc/v221/fluent",
+                "FLUENT_ARCH": "win64",
+                "RELEASE": "22.1.0",
+                "LIB_RELEASE": "2210",
+                "DIMENSION": "3d",
+                "PRECISE": "dp",
+                "PARALLEL_NODE": "msmpi"
+            }
+        },
+        {
+            "name": "mingw-release",
+            "displayName": "MinGW Makefiles (Release)",
+            "inherits": "mingw-debug",
+            "cacheVariables": {
+                "CMAKE_BUILD_TYPE": "Release"
+            }
+        }
+    ],
+    "buildPresets": [
+        {
+            "name": "mingw-debug",
+            "configurePreset": "mingw-debug"
+        },
+        {
+            "name": "mingw-release",
+            "configurePreset": "mingw-release"
+        }
+    ]
+}
